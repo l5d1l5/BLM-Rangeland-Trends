@@ -157,17 +157,6 @@ BLM_out %>%
   st_write('output/BLM_allotments_dropped/allotments_dropped.shp',
            append = F)
 
-unlink('output/BLM_allotments', recursive = T)
-dir.create('output/BLM_allotments')
-
-BLM_clean %>%
-  select(
-    uname,
-    ADMIN_ST,
-    ADM_OFC_CD,
-    ALLOT_NAME,
-  ) %>%
-  st_write('output/BLM_allotments/allotments.shp', append = F)
 
 # Save as sf object RDS 
 BLM_clean %>%
