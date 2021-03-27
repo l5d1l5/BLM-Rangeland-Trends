@@ -9,20 +9,20 @@ allotment_id <- read_csv('output/allotment_table.csv') %>%
 allotment_sf <- readRDS(file = 'output/BLM_cleaned_shape_sf.RDS') %>%
   left_join(allotment_id , by = c('uname', 'ADMIN_ST', 'ADM_OFC_CD', 'ALLOT_NAME'))
 
-elevation <- read_csv('data/MT_allotment_data/MT_allotment_elevation_by_feature.csv') %>% 
+elevation <- read_csv('data/RAP_EE_exports/MT_allotment_elevation_by_feature.csv') %>% 
   select( mean, uname ) %>% 
   rename( elevation = mean)
 
-climate <- read_csv('data/MT_allotment_data/MT_allotment_climate_by_feature.csv') %>% 
+climate <- read_csv('data/RAP_EE_exports/MT_allotment_climate_by_feature.csv') %>% 
   select( pdsi, pr, tavg, uname, year )
 
-production <- read_csv('data/MT_allotment_data/MT_allotment_biomass_by_feature.csv') %>% 
+production <- read_csv('data/RAP_EE_exports/MT_allotment_biomass_by_feature.csv') %>% 
   select( uname, year, contains('agb'))
 
-cover <- read_csv( 'data/MT_allotment_data/MT_allotment_cover_by_feature.csv') %>% 
+cover <- read_csv( 'data/RAP_EE_exports/MT_allotment_cover_by_feature.csv') %>% 
   select( uname, year, AFGC, BG, LTR, PFGC, SHR, TREE)
 
-burns <- read_csv('data/MT_allotment_data/MT_allotment_burns_by_feature.csv') %>% 
+burns <- read_csv('data/RAP_EE_exports/MT_allotment_burns_by_feature.csv') %>% 
   select(uname, tidyr::matches(match = '^\\d+')) %>% 
   pivot_longer(cols = -uname, names_to = 'year', values_to = 'burned') %>%
   mutate( year = as.numeric( str_extract( year, '\\d{4}$'))) 
