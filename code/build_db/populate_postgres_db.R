@@ -14,46 +14,73 @@ con <- DBI::dbConnect(
     port = '5432'
   )
 
-allotment_info <- read_rds('data/basic_allotment_info.rds')
+
+allotments <- read_rds('output/BLM_cleaned_shape_sf.RDS')
+
+allotment_centroids <- 
+  allotments %>% 
+  select(uname) %>% 
+  st_centroid()
+
+allotment_info <-
+  allotments %>%
+  st_drop_geometry()
 
 allotment_info <- 
   allotment_info %>% 
-  rowwise() %>% 
-  mutate( ADMIN_ST = ifelse( !ADMIN_ST %in% state.abb , 
-                             state.abb[STATE_NAME == state.name ], 
-                             ADMIN_ST))  %>% 
-  select( - STATE_NAME, -lat, -lon ) %>% 
-  mutate( acres = as.numeric(acres )) %>% 
-  ungroup() %>% 
-  distinct() 
+  select( -starts_with('US_'), 
+          -c(L3_KEY:L1_KEY), -STATE_NAME)
 
-any( is.na( allotment_info$ADMIN_ST  ) )  # Check missing State Abb. 
+stopifnot( !any( allotments %>% duplicated() ) )
+
+# Join with elevation 
+allotment_info <- 
+  allotment_info %>% left_join( 
+    read_rds('data/elevation.rds'), by = 'uname')
 
 # Creat table 
-names(allotment_info)
+allotment_info$acres <- as.numeric( allotment_info$acres )
+res_length <- lapply( allotment_info, function(x) { range( str_length(x) )  })
+res_type <- lapply( allotment_info, function(x) { class(x)  })
+
+# for create table query 
+paste( paste( tolower( names(allotment_info) ), res_type, res_length), 
+       collapse = ', ')
 
 create_table_query <-
   str_squish( str_remove_all("
-    CREATE TABLE allotments( 
-      uname INT, 
-      admin_st CHAR(2), 
-      adm_ofc_cd VARCHAR, 
-      allot_name VARCHAR, 
-      acres NUMERIC,
-      na_l3name VARCHAR, 
-      na_l2name VARCHAR, 
-      na_l1name VARCHAR, 
-      elevation NUMERIC, 
+    CREATE TABLE allotments(
+                             uname INT, 
+                             adm_unit_cd CHAR(8), 
+                             admu_name VARCHAR, 
+                             blm_org_type VARCHAR, 
+                             parent_cd VARCHAR, 
+                             parent_name VARCHAR, 
+                             admin_st CHAR(2), 
+                             na_l3code VARCHAR, 
+                             na_l3name VARCHAR, 
+                             na_l2code VARCHAR, 
+                             na_l2name VARCHAR, 
+                             na_l1code CHAR(2), 
+                             na_l1name VARCHAR, 
+                             epa_region INT, 
+                             admin_st_y CHAR(2), 
+                             adm_ofc_cd VARCHAR, 
+                             allot_name VARCHAR, 
+                             acres NUMERIC, 
+                             elevation NUMERIC,
       PRIMARY KEY(uname));", pattern = '\n'))
 
-create_table_query
-dbRemoveTable(con, 'allotments')
+#dbRemoveTable(con, 'allotments')
 
-RPostgres::dbSendQuery(con, create_table_query)
+RPostgres::dbSendQuery(con, create_table_query) # Create empty table 
 
 names( allotment_info) <- tolower( names( data.frame( allotment_info)) )
+names( allotment_info)  <- str_replace_all(names(allotment_info), pattern = '\\.', replace = '_')
 
-any( allotment_info %>% duplicated() )
+allotment_info <- 
+  allotment_info %>%
+  rename( admin_st = admin_st_x)
 
 RPostgres::dbWriteTable(con, 
              name = 'allotments', 
@@ -62,23 +89,23 @@ RPostgres::dbWriteTable(con,
              overwrite = F, 
              append = T)
 
-rm( allotment_info)
+# Allotment boundaries --------------------- # 
+allotments <- 
+  allotments %>%
+  select( uname )
 
-# Load Shapefile with allotment boundaries 
-blm_shape <- read_rds('data/BLM_sf.rds')
+allotments <- allotments %>% st_cast( 'MULTIPOLYGON') %>% st_transform(4269)
 
-blm_shape <- 
-  blm_shape %>% 
-  select( uid, uname, SHAPE )
-
-any( blm_shape %>% duplicated() )
+stopifnot( !any( allotments %>% duplicated() ) )
 
 # Write BLM shapes to database 
-st_write(blm_shape, con, fid_column_name = 'uid', 
+dbListTables(con)
+dbRemoveTable(con, 'allotment_shapes')
+
+st_write(allotments, con, 
          layer = 'allotment_shapes')
 
-rm(blm_shape)
-
+# Tests 
 test_spatial_query <- 
 'SELECT uname 
 FROM allotment_shapes  
@@ -88,13 +115,12 @@ ST_GeomFromText(\'POINT(-112.5191 45.5195)\', 4269));'
 test_spatial_query <- str_remove_all(test_spatial_query, '\\n')
 
 res <- dbGetQuery(con, test_spatial_query)
-
 stopifnot(res$uname == 6102) # Test that the correct uname is returned
 
-rm( res, testq )
+rm( res, test_spatial_query )
 
 test_join_query <- 
-  'SELECT a.uname, b.uid 
+  'SELECT a.uname
   FROM allotments a, allotment_shapes b
   WHERE 
     a.uname = b.uname
@@ -105,13 +131,11 @@ test_join_query <-
 
 res <- dbGetQuery(con, test_join_query)
 res %>% View
-
-# 
-
 rm( res )
 
+#
 test_join_query <- 
-  'SELECT a.uname, a.allot_name, a.acres, b.uid 
+  'SELECT a.uname, a.allot_name, a.acres 
   FROM allotments a, (SELECT * FROM allotment_shapes  
   WHERE ST_Contains( "SHAPE", 
   ST_GeomFromText(\'POINT(-112.5191 45.5195)\', 4269)) ) b
@@ -153,8 +177,8 @@ RPostgres::dbWriteTable(con,
 
 rm(res, annual_data)
 
-
 # 16-day production data 
+# For montana only 
 npp_16_day <- read_csv('data/MT_allotment_data/MT_allotment_16_day_NPP_by_feature.csv')
 
 npp_16_day <- 
@@ -191,8 +215,13 @@ RPostgres::dbWriteTable(con,
                         append = T)
 
 rm(res, npp_16_day)
-#clean up 
+# Add allotment Centroids 
 
+allotment_centroids <- allotment_centroids %>% st_transform(4269 )
+
+st_write( allotment_centroids, con, layer = 'allotment_centroids' )
+
+#clean up 
 dbDisconnect(conn = con )
 rm(list = ls())
 
