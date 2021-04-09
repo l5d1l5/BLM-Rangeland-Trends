@@ -4,19 +4,21 @@ library(tidyverse)
 library(dbplyr)
 library(ggridges)
 
-my_colors <- c('Annual' = 'sienna1', 
-               'Bare'  = 'darkgray', 
-               'Perennial' = 'steelblue', 
-               'Tree' = 'forestgreen', 
-               'Shrub' = 'lavender', 
-               'Litter' = 'red')
+my_colors0 <- c('sienna1', 'black','8dd3c7','#fb8072','#80b1d3', 'magenta' )
+names(my_colors0) <- c("Annual", "Bare", "Perennial", "Shrub", "Tree", "Litter")
+
+my_colors <- c( 'Annual' = '#b2df8a', 
+              'Bare'  = 'darkgray',
+              'Perennial' = '#1f78b4', 
+              'Shrub' = '#fb9a99', 
+              'Tree' = '#33a02c')
 
 plot_trends <- function( dataset, my_colors ){ 
   dataset %>% 
     ggplot( aes( x = year , y= value, fill = type, color = type)) + 
     stat_summary(fun.max = function(x) quantile(x, 0.75),
                  fun.min = function(x) quantile(x, 0.25), 
-                 geom = 'ribbon', alpha = 0.3, color = NA) + 
+                 geom = 'ribbon', alpha = 0.4, color = NA) + 
     stat_summary(fun = function( x ) median(x), geom = 'line') + 
     scale_fill_manual(values = my_colors) +   
     scale_color_manual(values = my_colors) + 
@@ -34,17 +36,8 @@ con <- DBI::dbConnect(
 
 allotment_info <- tbl( con, 'allotments')
 
-allotment_regions <- 
+allotment_info <- 
   allotment_info %>% 
-  select(uname, 
-         admu_name,
-         admin_st, 
-         admin_st_y, 
-         parent_cd, 
-         parent_name, 
-         na_l1name, na_l2name, na_l3name, acres, elevation) %>% 
-  mutate( admin_st = ifelse(is.na(admin_st), admin_st_y, admin_st)) %>% 
-  mutate( parent_name = str_to_title(parent_name)) %>%
   mutate( district_label = str_remove( parent_name, ' District.*$')) %>% 
   mutate( 
     office_label = str_remove_all(str_squish(str_trim ( str_to_title(admu_name))), 
@@ -73,8 +66,7 @@ allotment_regions <-
   ) 
 
 allotment_summary <- 
-  allotment_regions %>% 
-  filter( !is.na(parent_cd)) %>%
+  allotment_info %>% 
   group_by(district_label, admin_st ) %>% 
   summarise( num_allotments = as.numeric( count(uname) ), 
              total_acres = ( as.numeric( sum(acres))), 
@@ -82,6 +74,7 @@ allotment_summary <-
              min_acres = min(acres), 
              max_acres = max(acres), 
              mean_elevation = mean(elevation))
+
 
 fig1_num_allotments <- 
   allotment_summary %>%  
@@ -97,6 +90,13 @@ fig1_num_allotments <-
   ggsave(filename = 'output/figures/fig1_num_allotments.pdf', 
        width = 10, height = 7, units = 'in')
 
+allotment_summary %>%
+  ungroup( ) %>%
+  summarise( sum(num_allotments))
+
+allotment_summary %>% 
+  ungroup() %>% 
+  summarise( n_distinct(admin_st)) 
 
 fig2_acres_allotments <- 
   allotment_summary %>%  
@@ -112,23 +112,23 @@ fig2_acres_allotments <-
   ggsave(filename = 'output/figures/fig2_acres_allotments.pdf', 
          width = 10, height = 7, units = 'in')
 
-# Summarize counts and acres per EcoregionII
+# Summarize counts and acres per my Ecogroup Definitions 
 
 allotment_summary <- 
   allotment_info %>% 
-  mutate( ecoregion_label = str_to_title(na_l2name)) %>% 
-  mutate( ecoregion_label = str_squish( str_trim( str_remove_all( ecoregion_label, '[\\?\\*\\(\\)]')))) %>% 
-  group_by(ecoregion_label) %>% 
+  group_by(ecogroup) %>% 
   summarise( num_allotments = as.numeric( count(uname) ), 
              total_acres = ( as.numeric( sum(acres))), 
              mean_acres = mean(acres), 
+             median_acres = median(acres), 
              min_acres = min(acres), 
              max_acres = max(acres), 
              mean_elevation = mean(elevation)) 
 
+allotment_summary %>% collect() %>% view
+
 allotment_summary %>% 
-  filter( total_acres > 1e6) %>%
-  ggplot( aes( x = ecoregion_label, y = num_allotments )) + 
+  ggplot( aes( x = ecogroup, y = num_allotments )) + 
   geom_bar(stat = 'identity') + 
   geom_text( aes( label = num_allotments ), nudge_y = 150) + 
   #facet_wrap( ~admin_st , scales = 'free_x') +
@@ -137,13 +137,12 @@ allotment_summary %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12), 
         axis.title.x = element_blank(), 
         axis.title.y = element_text(margin = margin(1,10,1,1)))  + 
-  ggsave(filename = 'output/figures/fig1a_num_allotments_per_ecoregion2.pdf', 
+  ggsave(filename = 'output/figures/fig1a_num_allotments_per_ecogroup.pdf', 
           width = 10, height = 7, units = 'in' )
 
 
 allotment_summary %>% 
-  filter( total_acres > 1e6) %>% 
-  ggplot( aes( x = ecoregion_label, y = total_acres/1e6 )) + 
+  ggplot( aes( x = ecogroup, y = total_acres/1e6 )) + 
   geom_bar(stat = 'identity') + 
   geom_text( aes( label = round( total_acres/1e6, 1) ), nudge_y = 3) + 
   scale_y_continuous(name = 'Acres (Millions)') + 
@@ -151,7 +150,7 @@ allotment_summary %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12), 
         axis.title.x = element_blank(), 
         axis.title.y = element_text(margin = margin(1,10,1,1)))  + 
-  ggsave(filename = 'output/figures/fig2a_acres_allotments_ecoregion2.pdf', 
+  ggsave(filename = 'output/figures/fig2a_acres_allotments_ecogroups.pdf', 
          width = 10, height = 7, units = 'in' )
 
 
@@ -164,7 +163,9 @@ cover <-
   mutate( decade = paste0( as.character( decade), 's' ))  %>% 
   mutate( type = ifelse( type == 'AFGC', 'Annual', type )) %>%
   mutate( type = ifelse( type == 'PFGC', 'Perennial', type )) %>%
-  mutate( type = ifelse( type == 'BG', 'Bare', type))
+  mutate( type = ifelse( type == 'BG', 'Bare', type)) %>% 
+  mutate( type = ifelse( type == 'TREE', 'Tree', type)) %>%
+  mutate( type = ifelse( type == 'SHR', 'Shrub', type)) 
 
 # cover %>% 
 #   left_join(allotment_regions, by = 'uname') %>% 
@@ -174,74 +175,102 @@ cover <-
 #   geom_density_ridges(alpha = 0.5, scale = 3) + 
 #   facet_grid( type ~ er1label, scales = 'free')
 
-cover %>% 
-  left_join(allotment_regions, by = 'uname') %>% 
-  filter( type %in% c('Annual', 'Perennial', 'Bare')) %>% 
+
+
+# cover %>% 
+#   ungroup() %>%
+#   filter( type %in% c('Annual', 'Bare', 'Perennial', 'Tree', 'Shrub')) %>%
+#   mutate( class = ifelse( type %in% c('Tree', 'Shrub'), 'Woody', 'non-Woody')) %>% 
+#   group_by( year, class, type ) %>% 
+#   summarise( v = mean( value ), vmin = quantile(value, 0.25), vmax = quantile( value, 0.75)) %>%
+#   ggplot( aes( x = year, y = v, color = type, ymin = vmin, ymax = vmax, fill = type )) + 
+#   geom_line(aes( linetype = type)) + 
+#   geom_ribbon(alpha = 0.4, color = NA) + 
+#   scale_color_manual(values = colors2) + 
+#   scale_fill_manual(values = colors2) + 
+#   facet_grid( ~ class )  + 
+#   theme_bw()
+cover_for_plotting <- 
+  cover %>% 
+  left_join(allotment_info, by = 'uname') %>% 
+  mutate( ecogroup = ifelse( ecogroup == 'Mediterranean California', 'Mediterranean\nCalifornia', ecogroup)) %>%
+  filter( type %in% c('Annual', 'Perennial', 'Bare', 'Tree', 'Shrub')) %>% 
+  mutate( class = ifelse( type %in% c('Tree', 'Shrub'), 'Woody', 'Non-Woody'))  
+
+cover_for_plotting %>% 
+  select( uname, ecogroup, year, class, type, value, decade) %>% 
   plot_trends(my_colors = my_colors) + 
-  facet_wrap( ~ er1label ) + 
+  facet_grid(ecogroup ~ class , scales = 'free_y')  +
   scale_y_continuous(name = 'Percent Cover (+/- Interquartile Range)') + 
+  theme( strip.text.y = element_text(angle = 0), 
+         axis.title.x = element_text()) + 
   ggsave(filename = 'output/figures/fig3a_cover_trend_by_level_I_ecoregion.pdf', 
-         height = 7, width = 10, units = 'in') 
+         height = 10, width = 7, units = 'in') 
 
-cover %>% 
-  left_join(allotment_regions, by = 'uname') %>% 
-  filter( type %in% c('Annual', 'Perennial', 'Bare')) %>% 
+cover_for_plotting %>%  
   plot_trends(my_colors = my_colors) + 
-  facet_wrap( ~ er2label ) + 
+  facet_grid(er2label ~ class, scales = 'free_y') + 
   scale_y_continuous(name = 'Percent Cover (+/- Interquartile Range)') + 
+  theme( strip.text.y = element_text(angle = 0), 
+         axis.title.x = element_text()) + 
   ggsave(filename = 'output/figures/fig3b_cover_trend_by_level_II_ecoregion.pdf', 
-       height = 7, width = 10, units = 'in') 
+       height = 10, width = 7, units = 'in') 
 
-cover %>% 
-  left_join(allotment_regions, by = 'uname') %>% 
-  filter( type %in% c('Annual', 'Perennial', 'Bare')) %>% 
+cover_for_plotting %>%  
   plot_trends(my_colors = my_colors) + 
-  facet_wrap( ~ admin_st ) + 
+  facet_grid(admin_st ~ class, scales = 'free_y') + 
   scale_y_continuous(name = 'Percent Cover (+/- Interquartile Range)') + 
+  theme( strip.text.y = element_text(angle = 0), 
+         axis.title.x = element_text()) + 
   ggsave(filename = 'output/figures/fig3c_cover_trend_by_state.pdf', 
-       height = 7, width = 10, units = 'in') 
+         height = 10, width = 7, units = 'in') 
 
-
-cover %>% 
-  left_join(allotment_regions, by = 'uname') %>% 
-  filter( type %in% c('Annual', 'Perennial', 'Bare')) %>% 
-  filter( admin_st %in% c('MT') ) %>% 
+cover_for_plotting %>% 
+  filter( admin_st %in% c('MT') , 
+          type %in% c('Annual', 'Bare', 'Perennial')) %>% 
   plot_trends(my_colors = my_colors) + 
-  facet_wrap(district_label ~ office_label) + 
+  facet_wrap( ~ office_label) + 
   scale_y_continuous(name = 'Percent Cover (+/- Interquartile Range)') + 
+  theme( axis.title.x = element_text()) + 
+  ggtitle('Average Allotment Cover by MT Field Office') + 
   ggsave( filename = 'output/figures/fig3d_MT_cover_trends_by_field_office.pdf', 
           height = 7, width = 10, units = 'in')
 
 
 # Allotment Aboveground Biomass
-AGB <- 
+AGB_for_plotting <- 
   tbl(con, 'annual_data') %>%
   filter( type %in% c('afgAGB','pfgAGB')) %>% 
   mutate( decade = as.integer( floor( year/10)*10 )) %>%
   mutate( decade = paste0( as.character( decade), 's' ))   %>% 
   mutate( type = ifelse( type == 'afgAGB', 'Annual', type )) %>%
-  mutate( type = ifelse( type == 'pfgAGB', 'Perennial', type))
+  mutate( type = ifelse( type == 'pfgAGB', 'Perennial', type)) %>% 
+  mutate( class = 'Herbaceous AGB') %>% 
+  left_join(allotment_info, by = 'uname') %>% 
+  mutate( ecogroup = 
+            ifelse( ecogroup == 'Mediterranean California', 'Mediterranean\nCalifornia', ecogroup))
 
 
-AGB %>% 
-  left_join(allotment_regions, by = 'uname') %>% 
+AGB_for_plotting %>% 
   plot_trends( my_colors = my_colors) + 
-  facet_wrap( ~ er1label) +
+  facet_grid( ecogroup ~ class, scales = 'free_y') +
   scale_y_continuous(name = 'Above Ground Biomass (lbs. per acre)') + 
-  ggsave(filename = 'output/figures/fig4a_AGB_trend_by_level_I_ecoregion.pdf', 
-       height = 7, width = 10, units = 'in') 
+  theme( strip.text.y = element_text(angle = 0), 
+         axis.title.x = element_text()) + 
+  ggsave(filename = 'output/figures/fig4a_AGB_trend_by_ecogroup.pdf', 
+       height = 10, width = 7, units = 'in') 
 
-AGB %>% 
-  left_join(allotment_regions, by = 'uname') %>% 
+AGB_for_plotting %>% 
   plot_trends( my_colors = my_colors) + 
-  facet_wrap( ~ er2label) +
+  facet_grid( er2label ~ class, scales = 'free_y') +
   scale_y_continuous(name = 'Above Ground Biomass (lbs. per acre)') + 
+  theme( strip.text.y = element_text(angle = 0), 
+         axis.title.x = element_text())
   ggsave(filename = 'output/figures/fig4b_AGB_trend_by_level_II_ecoregion.pdf', 
-         height = 7, width = 10, units = 'in') 
+         height = 10, width = 7, units = 'in') 
 
 
-AGB %>% 
-  left_join(allotment_regions, by = 'uname') %>% 
+AGB_for_plotting %>% 
   plot_trends( my_colors = my_colors) + 
   facet_wrap(~ admin_st ) +
   scale_y_continuous(name = 'Above Ground Biomass (lbs. per acre)') + 
@@ -249,12 +278,11 @@ AGB %>%
          height = 7, width = 10, units = 'in') 
 
 
-AGB %>% 
-  left_join(allotment_regions, by = 'uname') %>% 
+AGB_for_plotting %>% 
   filter( admin_st == 'MT' ) %>%
   plot_trends( my_colors = my_colors) + 
   facet_wrap( district_label ~ office_label) +
-  scale_y_continuous(name = 'Above Ground Biomass (lbs. per acre)') + 
+  scale_y_continuous(name = 'Above Ground Biomass (lbs. per acre)') +
   ggsave(filename = 'output/figures/fig4d_MT_AGB_trend_by_field_office.pdf', 
          height = 7, width = 10, units = 'in') 
 
