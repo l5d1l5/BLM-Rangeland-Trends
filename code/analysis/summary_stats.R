@@ -2,30 +2,8 @@ rm(list = ls())
 
 library(tidyverse)
 library(dbplyr)
-library(ggridges)
 
-my_colors0 <- c('sienna1', 'black','8dd3c7','#fb8072','#80b1d3', 'magenta' )
-names(my_colors0) <- c("Annual", "Bare", "Perennial", "Shrub", "Tree", "Litter")
-
-my_colors <- c( 'Annual' = '#b2df8a', 
-              'Bare'  = 'darkgray',
-              'Perennial' = '#1f78b4', 
-              'Shrub' = '#fb9a99', 
-              'Tree' = '#33a02c')
-
-plot_trends <- function( dataset, my_colors ){ 
-  dataset %>% 
-    ggplot( aes( x = year , y= value, fill = type, color = type)) + 
-    stat_summary(fun.max = function(x) quantile(x, 0.75),
-                 fun.min = function(x) quantile(x, 0.25), 
-                 geom = 'ribbon', alpha = 0.4, color = NA) + 
-    stat_summary(fun = function( x ) median(x), geom = 'line') + 
-    scale_fill_manual(values = my_colors) +   
-    scale_color_manual(values = my_colors) + 
-    theme_bw() + 
-    theme( axis.title.x =  element_blank() , legend.title = element_blank() ) 
-}
-
+source('code/analysis/plot_tools.R')
 
 con <- DBI::dbConnect(
   RPostgres::Postgres(),
