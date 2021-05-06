@@ -83,11 +83,16 @@ annual_data <-
   tbl(con, 'annual_data') %>% 
   filter( year  > 1990 ) %>%
   filter( value > 0 ) %>% 
-  left_join(allotments, by = 'uname')  
+  left_join(allotments, by = 'uname') %>% 
+  filter( ecogroup != "Coastal Forests")
+
 
 afg <- 
   annual_data %>% 
-  filter( type == 'afgAGB', value > 1) %>%
+  filter( type == 'afgAGB') %>%
+  group_by( type, uname ) %>%
+  filter( min(value) > 0.5 ) %>% 
+  ungroup() %>% 
   select( uname, year,value, admin_st, district_label, office_label, ecogroup) %>% 
   collect() %>% 
   as.data.frame() %>% 
@@ -96,7 +101,10 @@ afg <-
 
 pfg <- 
   annual_data %>% 
-  filter( type == 'pfgAGB', value > 1) %>%
+  filter( type == 'pfgAGB') %>%
+  group_by( type, uname ) %>%
+  filter( min(value) > 0.5 ) %>% 
+  ungroup() %>% 
   select( uname, year,value, admin_st, district_label, office_label, ecogroup) %>% 
   collect() %>% 
   as.data.frame() %>% 
@@ -142,7 +150,9 @@ rm( afg, pfg, m_afg_npp, m_pfg_npp)
 cover <- 
   annual_data %>%  
   filter( type %in% c('AFGC', 'PFGC', 'BG', 'TREE', 'SHR')) %>% 
-  filter( value > 0.5 ) 
+  group_by( type, uname ) %>% 
+  filter( min( value)  > 0.5 ) %>% 
+  ungroup()
 
 
 AFGC <- cover %>% 

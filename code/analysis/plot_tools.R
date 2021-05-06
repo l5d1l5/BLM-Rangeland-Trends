@@ -11,6 +11,28 @@ my_colors <- c( 'Annual' = '#b2df8a',
                 'Shrub' = '#fb9a99', 
                 'Tree' = '#33a02c')
 
+WESTERN_STATES <- c('AZ', 'CA', 'CO', 'ID', 'NE', 'NV', 'NM',
+                    'ND', 'OR', 'MT', 'SD', 'UT', 'WA', 'WY')
+
+ecogroup_colors <- RColorBrewer::brewer.pal(n = 7, 'Set2')
+names( ecogroup_colors  ) <- c(
+  'W Cold Deserts', 
+  'E Cold Deserts', 
+  'Great Plains', 
+  'Mediterranean California', 
+  'NW Forested Mts', 
+  'AZ/NM Highlands', 
+  'Warm Deserts')
+
+
+decade_function <- function(x ) { 
+  paste0( 
+    str_pad( 
+      floor(( x %% 100 ) %/% 10 )*10, 
+      width = 2, 
+      side = 'left', 
+      pad = '0'), 's')
+}
 
 
 plot_trends <- function( dataset, my_colors ){ 
@@ -39,7 +61,7 @@ back_transform <- function(x, attributes_obj, log = T ){
   if( log ){ 
     exp( (sd*x) + center) 
   }else{ 
-    sd*x - center 
+    sd*x + center 
   }
 }
 
@@ -73,4 +95,49 @@ plot_ecogroup_trend_coefficients <- function( trend_summary, my_colors ){
     theme(axis.text.x =  element_text(angle = 45 , hjust = 1), axis.title.x = element_blank()) + 
     ylab( 'Annual Coefficient')    
   
+}
+
+
+
+# Functions for summarizing trends at the Ecogroup and BLM Admin Level
+get_ecogroup_trends <- function( model ){ 
+  
+  fixeffects <- emtrends(model, ~ ecogroup, 'year2') %>% 
+    as.data.frame()
+  
+  ecogroup_effect <- fixeffects$year2.trend
+  names(ecogroup_effect) <-  c( str_trim( fixeffects$ecogroup ) )
+  
+  return( ecogroup_effect ) 
+} 
+
+
+get_blm_random_effects <- function( model ) { 
+  
+  dist_effects <- ranef(model)$district_label 
+  office_effects <- ranef(model)$office_label
+  allot_effects <- ranef(model)$uname
+  
+  out <- list( dist_effects, office_effects, allot_effects ) 
+  names( out ) <- c("dist_effects", "office_effects", "allot_effects")
+  
+  return( out )
+} 
+
+
+blm_trend_summary <- function( my_data , ecogroup_effects,  random_effects ){ 
+  
+  trend_summary <- my_data %>% 
+    distinct(ecogroup, uname, office_label, district_label) %>% 
+    mutate( ecogroup_trend = ecogroup_effects[ ecogroup] ) %>% 
+    mutate( office_trend = random_effects$office_effects[office_label, ]$year2, 
+            district_trend = random_effects$dist_effects[district_label, ]$year2, 
+            allotment_trend = random_effects$allot_effects[uname, ]$year2) %>% 
+    rowwise() %>% 
+    mutate( full_trend = ecogroup_trend + 
+              district_trend + 
+              office_trend + allotment_trend) %>% 
+    select( full_trend, office_trend, district_trend, allotment_trend, ecogroup_trend, ecogroup,  district_label, office_label, uname )
+  
+  return(trend_summary) 
 }

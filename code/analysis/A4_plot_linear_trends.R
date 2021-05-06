@@ -142,3 +142,124 @@ woody_trend_coefficient_plot +
   ggsave(filename = 'output/figures/fig6c_woody_cover_trend_coefficients_by_Ecoregion.pdf', 
          height = 7, width = 10, units = 'in') 
 
+
+# Variance partitioning
+vc <- lapply(cover_models, VarCorr)
+vc <- lapply( vc, data.frame )
+vc <- mapply( x = types, y = vc, function(x, y) {y$type <- x; return(y)}, SIMPLIFY = F)
+
+cover_models[[1]] %>% 
+  VarCorr %>% 
+  data.frame()
+
+
+AFGC <- cover_models[[1]]@frame
+
+
+vc %>% bind_rows() %>% 
+  filter( var1 == 'year2') %>% group_by( type) %>% 
+  mutate( pvcov = vcov/sum(vcov)) %>% 
+  ggplot( aes( x = type, y = pvcov,fill = grp)) + 
+  geom_bar(stat = 'identity')  
+
+
+agb_types  <- c( str_extract( npp_model_files, pattern = '[a-z]fg') )
+
+vc_agb <- lapply( npp_models, VarCorr) 
+vc_agb <- lapply( vc_agb, data.frame)
+vc_agb <- mapply( x = agb_types, y = vc_agb, function(x,y){y$type <- x; return(y)}, SIMPLIFY = F)
+
+trend_variance <- vc_agb %>% 
+  bind_rows() %>% 
+  filter( var1 == 'year2') %>% 
+  mutate( type = factor(type, labels = c('Annual AGB', 'Perennial AGB'))) %>%
+  bind_rows( vc %>% bind_rows() %>% filter( var1 == 'year2')) %>% 
+  group_by( type ) %>%
+  mutate(prop_var = vcov/sum(vcov)) %>% 
+  ungroup() 
+
+trend_variance$Group <- factor( trend_variance$grp, labels = c('District', 'Field Office', 'Allotment') )
+trend_variance$type_labels <- factor( trend_variance$type, labels = c('Annual AGB', 'Perennial AGB', 'Annual Cover', 'Bare Cover', 'Perennial Cover', 'Shrub Cover', 'Tree Cover'))
+trend_variance$type_labels <- factor( trend_variance$type_labels, levels = c('Annual AGB', 'Annual Cover', 'Perennial AGB', 'Perennial Cover', 'Shrub Cover', 'Tree Cover', 'Bare Cover'), ordered = T)
+
+trend_variance %>% 
+  ggplot( aes( x = type_labels, y = prop_var, fill = Group )) + 
+  geom_bar(stat = 'identity') + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 60,hjust = 1), axis.title.x = element_blank()) + 
+  ylab( 'Proportion of variance in trend coefficient') +
+  ggsave(filename = 'output/figures/fig9_trend_variance.pdf', 
+         height = 6, width = 7, units = 'in')
+
+
+# Fire trends 
+burn_binom_model <- read_rds('output/burn_binom_trend_model.rds')
+burn_area_model <- read_rds('output/burn_area_poisson_model.rds')
+
+ecogroup_trend <- ecogroup_trends_as_df(burn_binom_model, type = 'burned')
+ecogroup_trend_area <- ecogroup_trends_as_df(burn_area_model, type = 'burned')
+
+plot_ecogroup_trend_coefficients(ecogroup_trend, 
+                                 my_colors = c('burned' = 'black')) + 
+  ggtitle('Trends in Burn Probability 1991 - 2019') + 
+  ggsave( filename = 'output/figures/fig7a_burn_frequency_trend_coefficients_by_Ecoregion.pdf', 
+          height = 7, width = 10, units = 'in')
+
+plot_ecogroup_trend_coefficients(ecogroup_trend_area, 
+                                 my_colors = c('burned' = 'black')) + 
+  ggtitle('Trends in Burned Area per Ecoregion 1991 - 2019') + 
+  ggsave(filename = 'output/figures/fig8a_burned_area_trend_coefficients_by_Ecoregion.pdf', 
+         height = 7, width = 10, units = 'in')
+
+
+fire_dat <- burn_area_model@frame
+year2 <- fire_dat$year2
+year2
+attr_obj <- attributes(year2)[2:3]
+
+library( lme4)
+
+pred_frame <- 
+  fire_dat %>% 
+  distinct( year2, ecogroup ) %>%
+  mutate( year = back_transform(year2, 
+                                attributes_obj = attributes( year2), 
+                                log = F)) 
+
+mean_offset <- mean(fire_dat$`(offset)`)
+pred_frame$`(offset)` <- mean_offset
+pred_frame$log_area <- mean_offset
+
+pred_frame %>% head
+
+burn_area_model
+
+pred_frame$burned_area <- predict(burn_area_model, 
+                           newdata = pred_frame, 
+                           re.form = NA, 
+                           type = 'response')
+
+pred_frame %>%
+  ggplot( aes( x = year, y = burned_area, color = ecogroup)) + 
+  geom_line()  + 
+  facet_wrap( ~ecogroup)
+
+burn_data %>% 
+  mutate( year = back_transform(year2, attributes_obj = attributes( year2), log = F)) %>% 
+  mutate( year = as.numeric(year)) %>% 
+  group_by( year, ecogroup ) %>% 
+  summarise( p_burned = sum(has_burned)/n() )   %>% 
+  ggplot( aes( x = year, y = p_burned, color = ecogroup)) + 
+  stat_summary( fun  = 'mean', geom = 'line') + 
+  facet_wrap(~ecogroup)
+
+
+burn_data %>% 
+  mutate( year = back_transform(year2, attributes_obj = attributes( year2), log = F)) %>% 
+  mutate( year = as.numeric(year)) %>% 
+  group_by( year, ecogroup ) %>% 
+  summarise( p_burned = sum(has_burned)/n() )   %>% 
+  ggplot( aes( x = year, y = p_burned, color = ecogroup)) + 
+  stat_summary( fun  = 'mean', geom = 'line') + 
+  facet_wrap(~ecogroup)
+
