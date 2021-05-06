@@ -5,23 +5,20 @@ rm(list = ls())
 library(sf)
 library(tidyverse)
 library(lubridate)
+source('code/analysis/plot_tools.R')
 
 # input -------------------------- # 
-allotment_shapes <- readRDS(file = 'output/BLM_cleaned_shape_sf.RDS')
+allotment_centers <- readRDS(file = 'data/temp/BLM_allotments_sf.rds') %>%
+  ungroup() %>%
+  st_centroid() %>%
+  select( uname ) 
+
 state_bounds <- tigris::states(resolution = '20m')
 ER <- read_sf('data/us_eco_l3_state_boundaries/us_eco_l3_state_boundaries.shp')
-
-m2_per_ACRE <- 4046.8564224
-
 #--------------------------------- # 
 
-# convert to points for faster geospatial join 
-allotment_centers <- 
-  allotment_shapes %>% 
-  st_centroid()
-
 ER <- ER %>% 
-  st_transform(crs = st_crs(allotment_shapes))
+  st_transform(crs = st_crs(allotment_centers))
 
 # 
 sel_states <- state.name[ state.abb %in% c('OR', 'WA', 'MT', 
@@ -31,12 +28,12 @@ sel_states <- state.name[ state.abb %in% c('OR', 'WA', 'MT',
 state_bounds <- 
   state_bounds %>% 
   filter( NAME %in% sel_states ) %>%
-  st_transform(crs = st_crs(ER)) 
+  st_transform(crs = st_crs(allotment_centers)) 
 
 # Use Level I Ecoregions in all cases except: 
 # 1. Break deserts to level II ecoregions: warm deserts and cold deserts
 # 2. Lump Southern Semi-Arid Highlands with Temperate Sierras = "S. Mts."
-
+# 3. Split Cold Deserts (ERII) into West and East  
 ecoregion_def <- 
   ER %>%
   filter( STATE_NAME %in% sel_states ) %>% 
@@ -93,16 +90,53 @@ ecoregion_def <-
   ecoregion_def %>%
   left_join(ecoregion_labels , by = 'Ecoregion') 
 
-ER <- ER %>% left_join(ecoregion_def ) # Add new labels 
+ER <- 
+  ER %>%
+  st_simplify(preserveTopology = T) %>%
+  st_make_valid() %>% 
+  st_cast( 'MULTIPOLYGON')
+
+
+ER <- ER %>% 
+  distinct( L3_KEY , STATE_NAME) %>%
+  filter( STATE_NAME %in% state.name[state.abb %in% WESTERN_STATES]) %>% 
+  left_join(
+    ecoregion_def %>% distinct( L3_KEY, Ecoregion, ecogroup ) 
+  )
+
+#st_precision(ER) <- 10000 
+
+ER <- 
+  ER %>% 
+  filter( !is.na(ecogroup)) %>%
+  group_by( ecogroup ) %>% 
+  summarise( geometry = st_union( geometry )) %>%
+  st_make_valid()
+
+ER <- ER %>% 
+  st_simplify( preserveTopology = T, dTolerance = 500 ) %>% 
+  st_make_valid() 
+
+# ER %>% ggplot() + 
+#   geom_sf(aes( fill = ecogroup))
 
 # Get allotment ecoregions 
-allotment_centers <- 
+allotment_centers_with_ecogroup <- 
   allotment_centers %>% 
   st_join(ER, left = T, join = st_within )
 
-allotment_centers %>%
-  rowwise() %>% 
-  mutate( ADMIN_ST = ifelse( ADMIN_ST == ' ', state.abb[ state.name == STATE_NAME], ADMIN_ST)) %>%
-  ungroup() %>% 
-  select( -starts_with('US'), -contains('KEY'), -contains('CODE')) %>% 
-  write_rds(file = 'data/allotment_centers_with_ecoregion.rds')
+allotment_info <- read_csv('data/temp/cleaned_allotment_info.csv')
+
+allotment_info %>% 
+  left_join( allotment_centers_with_ecogroup %>% 
+               st_drop_geometry(), by = 'uname' ) %>% 
+  write_csv(file = 'data/temp/cleaned_allotment_info.csv', append = F)
+
+ER %>% 
+  write_rds(file = 'data/temp/simplified_ecogroup_shapefile.rds')
+
+state_bounds %>%
+  st_transform(crs = st_crs(ER)) %>% 
+  filter( STUSPS %in% WESTERN_STATES) %>% 
+  write_rds(file = 'data/temp/western_states_outlines_shapefile.rds')
+

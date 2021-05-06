@@ -1,15 +1,11 @@
 rm(list = ls())
 library(sf)
 library(tidyverse)
-library(ggridges)
 library(lubridate)
 
-allotment_id <- read_csv('output/allotment_table.csv') %>% 
+allotment_id <- read_csv('data/temp/cleaned_allotment_info.csv') %>% 
   select( uname, ADMIN_ST, ADM_OFC_CD, ALLOT_NO, ALLOT_NAME ) %>%
   mutate( `Bill Allot Number` = paste0( ADMIN_ST, ALLOT_NO))
-
-# allotment_sf <- readRDS(file = 'output/BLM_cleaned_shape_sf.RDS') %>%
-#   left_join(allotment_id , by = c('uname', 'ADMIN_ST', 'ADM_OFC_CD', 'ALLOT_NAME'))
 
 elevation <- read_csv('data/RAP_EE_exports/allotment_elevation_by_feature.csv') %>% 
   select( mean, uname ) %>% 
@@ -29,6 +25,7 @@ burns <- read_csv('data/RAP_EE_exports/allotment_burns_by_feature.csv') %>%
   pivot_longer(cols = -uname, names_to = 'year', values_to = 'burned') %>%
   mutate( year = as.numeric( str_extract( year, '\\d{4}$'))) 
 
+# where is "aum_all.rds" from? Directly from Chris?
 grazing <- read_rds('data/aum_all.rds') %>% 
   left_join( 
     allotment_id %>% 
@@ -36,25 +33,16 @@ grazing <- read_rds('data/aum_all.rds') %>%
   by = "Bill Allot Number") %>% 
   mutate( year = year( mdy(`Bill Begin Date`)))
 
+
 grazing %>%
   select( uname, year , starts_with('Bill'), ADM_OFC_CD, ALLOT_NAME, ALLOT_NO) %>%
   arrange( uname, year ) %>% 
-  write_rds('data/allotment_grazing_data.rds')
+  write_rds('data/temp/allotment_grazing_data.rds')
 
-# Clean up allotment administrative information 
-
-# allotment_sf %>% 
-#   select( uname:acres, NA_L3NAME, NA_L2NAME, NA_L1NAME, STATE_NAME) %>% 
-#   mutate( centroids = st_transform( st_centroid(SHAPE), crs = 'epsg:4326')) %>%
-#   mutate( lon = st_coordinates(centroids)[,1], lat = st_coordinates(centroids)[,2]) %>% 
-#   select( - centroids) %>%
-#   st_drop_geometry() %>% 
-#   left_join(elevation) %>% 
-#   write_rds(file = 'data/basic_allotment_info.rds')
 elevation %>% 
   select( uname, elevation) %>%
   mutate( elevation = as.numeric(elevation)) %>% 
-  write_rds(file = 'data/elevation.rds')
+  write_rds(file = 'data/temp/elevation.rds')
 
 # Join the response data together into one long data frame 
 climate %>%
@@ -64,6 +52,6 @@ climate %>%
   select(uname, year, pdsi, pr, tavg, afgAGB:pfgAGB, AFGC:TREE, burned) %>% 
   pivot_longer(cols = c(pdsi:TREE, burned), names_to = 'type', values_to = 'value')  %>%
   filter( complete.cases(.)) %>%
-  write_rds( file = 'data/allotment_data_long.rds')
+  write_rds( file = 'data/temp/allotment_data_long.rds')
 
 # 

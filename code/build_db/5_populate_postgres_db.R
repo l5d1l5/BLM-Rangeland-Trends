@@ -14,9 +14,19 @@ con <- DBI::dbConnect(
     port = '5432'
   )
 
-allotment_shapes <- read_rds('output/BLM_cleaned_shape_sf.RDS')
-allotment_centers <- read_rds('data/allotment_centers_with_ecogroup_and_BLM_office.rds')
 
+allotment_shapes <- read_rds('data/temp/BLM_allotments_sf.RDS')
+
+allotment_info <- read_csv('data/temp/cleaned_allotment_info.csv')
+
+
+allotment_centers <- 
+  allotment_shapes %>% 
+  ungroup() %>%
+  st_centroids()
+
+
+#allotment_centers <- read_rds('data/temp/allotment_centers_with_ecogroup_and_BLM_office.rds')
 st_crs(allotment_shapes) == st_crs(allotment_centers)
 
 allotment_centroids <- 
