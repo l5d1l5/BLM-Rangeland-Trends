@@ -124,6 +124,14 @@ BLM <-
   mutate( area = st_area( SHAPE) ) %>% 
   mutate( acres = area/m2_per_ACRE )
 
+# Check for duplicates 
+stopifnot(
+  BLM %>% 
+  ungroup() %>% 
+  st_drop_geometry() %>% 
+  group_by( uname ) %>% 
+  filter( n() > 1 ) %>%nrow() == 0 )
+
 # create if don't exit 
 dir.create('data/temp')
 dir.create('data/temp/BLM_allotments_cleaned')

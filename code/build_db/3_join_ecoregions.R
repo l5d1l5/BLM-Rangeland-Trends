@@ -17,6 +17,15 @@ state_bounds <- tigris::states(resolution = '20m')
 ER <- read_sf('data/us_eco_l3_state_boundaries/us_eco_l3_state_boundaries.shp')
 #--------------------------------- # 
 
+# add ecogroup column to allotment table: 
+con <- DBI::dbConnect(
+  RPostgres::Postgres(),
+  dbname = 'blm', 
+  user = 'andy', 
+  port = '5432'
+)
+# Get ecogroup 
+
 ER <- ER %>% 
   st_transform(crs = st_crs(allotment_centers))
 
@@ -96,15 +105,12 @@ ER <-
   st_make_valid() %>% 
   st_cast( 'MULTIPOLYGON')
 
-
 ER <- ER %>% 
   distinct( L3_KEY , STATE_NAME) %>%
   filter( STATE_NAME %in% state.name[state.abb %in% WESTERN_STATES]) %>% 
   left_join(
     ecoregion_def %>% distinct( L3_KEY, Ecoregion, ecogroup ) 
   )
-
-#st_precision(ER) <- 10000 
 
 ER <- 
   ER %>% 
@@ -117,21 +123,81 @@ ER <- ER %>%
   st_simplify( preserveTopology = T, dTolerance = 500 ) %>% 
   st_make_valid() 
 
-# ER %>% ggplot() + 
-#   geom_sf(aes( fill = ecogroup))
-
 # Get allotment ecoregions 
 allotment_centers_with_ecogroup <- 
   allotment_centers %>% 
   st_join(ER, left = T, join = st_within )
 
-allotment_info <- read_csv('data/temp/cleaned_allotment_info.csv')
+missing <- allotment_centers_with_ecogroup %>% filter( is.na(ecogroup))
 
-allotment_info %>% 
-  left_join( allotment_centers_with_ecogroup %>% 
-               st_drop_geometry(), by = 'uname' ) %>% 
-  write_csv(file = 'data/temp/cleaned_allotment_info.csv', append = F)
+missing <- missing %>%
+  st_join(ER %>% st_buffer( dist = 200), largest = T, left = T, join = st_within)
 
+# fill in missing ecogroup 
+allotment_centers_with_ecogroup <- 
+  allotment_centers_with_ecogroup %>%
+  left_join(missing %>% st_drop_geometry(), by = 'uname') %>% 
+  mutate( ecogroup = ifelse( is.na(ecogroup), ecogroup.y, ecogroup )) %>% 
+  select( uname, ecogroup ) 
+
+# Reduce duplicates with ambiguous joins 
+allotment_centers_with_ecogroup <- 
+  allotment_centers_with_ecogroup %>% 
+  group_by( uname ) %>% 
+  filter( row_number() == 1)
+
+
+# Check that all allotments have an Ecogroup
+stopifnot(allotment_centers_with_ecogroup %>% 
+            filter(is.na(ecogroup)) %>%nrow == 0)
+
+stopifnot( allotment_centers_with_ecogroup %>% 
+             group_by( uname ) %>% 
+             filter(n() > 1 ) %>% nrow == 0)
+
+allotment_ecogroups <- 
+  allotment_centers_with_ecogroup %>% 
+  ungroup() %>% 
+  st_drop_geometry() 
+
+# now add ecogroup information to the allotments table 
+create_table_query <-
+  str_squish( str_remove_all("
+    CREATE TABLE ecogroup(uname INT, 
+                          ecogroup VARCHAR, 
+                          FOREIGN KEY (uname) REFERENCES allotments (uname));", 
+                             pattern = '\n'))
+
+RPostgres::dbSendQuery(con, create_table_query) # Create empty table 
+
+
+#
+alter_table_query <- "ALTER TABLE allotments ADD ecogroup VARCHAR;"
+dbSendQuery(con, alter_table_query)
+
+RPostgres::dbWriteTable(con, name = 'ecogroup', 
+                        value = allotment_ecogroups, 
+                        row.names = F, 
+                        overwrite = F, 
+                        append = T)
+
+# Insert ecogroup 
+res <- dbSendQuery(con, 'UPDATE allotments
+                          SET ecogroup = ecogroup.ecogroup 
+                          FROM ecogroup 
+                          WHERE ecogroup.uname = allotments.uname;')
+
+# test that the insert worked 
+test1 <- tbl( con, "allotments") %>% select( uname, ecogroup ) %>% collect()
+test2 <- tbl( con, "ecogroup") %>% select(uname, ecogroup) %>% collect()
+
+stopifnot( 
+  all.equal( 
+  test1 %>% arrange( uname ), 
+  test2 %>% arrange( uname ) )
+)
+
+# Save Ecogroup shapes 
 ER %>% 
   write_rds(file = 'data/temp/simplified_ecogroup_shapefile.rds')
 

@@ -5,7 +5,15 @@ library(sf)
 
 # Run "clean_allotment_shapes" first 
 
-allotment_info <- readRDS(file = 'data/temp/BLM_allotments_sf.rds') %>% st_drop_geometry()
+allotment_info <- readRDS(file = 'data/temp/BLM_allotments_sf.rds') %>%
+  ungroup() %>%
+  st_centroid() %>%
+  st_transform( "epsg:4326") %>%
+  mutate( 
+    xy = st_coordinates(SHAPE)) %>% 
+  st_drop_geometry()  %>% 
+  mutate( lon = xy[,1], lat = xy[,2]) %>% 
+  select( - xy )
 
 adm_districts <- sf::read_sf('data/BLM_National_Administrative_Units/admu.gdb/', 
                            layer = 'blm_natl_admu_dist_poly_webpub') %>% 
@@ -95,7 +103,7 @@ admin_office_info <-
 
 allotment_info <- 
   allotment_info %>% 
-  select( uname, ALLOT_NO, ALLOT_NAME, LAST_DATE, area, acres, ADM_UNIT_CD ) %>% 
+  select( uname, ALLOT_NO, ALLOT_NAME, LAST_DATE, area, acres, ADM_UNIT_CD, ADMIN_ST, lat, lon ) %>% 
   left_join(admin_office_info, by = 'ADM_UNIT_CD') 
 
 # check for duplicates 
@@ -112,8 +120,10 @@ allotment_info %>%
 # Write as table.  
 # Join with allotment shapes on uname later for maps 
 # Join with summary stats by uname from google earth engine later 
+names( allotment_info ) <- str_to_lower(str_trim(str_squish(names(allotment_info))))
+
 allotment_info %>% 
-  write_csv( file = 'data/temp/cleaned_allotment_info.csv')
+  write_rds( file = 'data/temp/allotment_info.rds')
 
 #
 adm_offices %>% 
