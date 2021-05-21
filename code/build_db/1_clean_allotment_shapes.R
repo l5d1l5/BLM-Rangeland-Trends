@@ -121,7 +121,7 @@ BLM <-
   summarise( SHAPE = st_union(SHAPE), LAST_DATE = max(LAST_DATE), FIRST_DATE = min(LAST_DATE) )  %>% 
   ungroup() %>%
   st_make_valid() %>%
-  mutate( area = st_area( SHAPE) ) %>% 
+  mutate( area = st_area( SHAPE)/10000) %>% 
   mutate( acres = area/m2_per_ACRE )
 
 # Check for duplicates 
@@ -133,6 +133,7 @@ stopifnot(
   filter( n() > 1 ) %>%nrow() == 0 )
 
 # create if don't exit 
+
 dir.create('data/temp')
 dir.create('data/temp/BLM_allotments_cleaned')
 

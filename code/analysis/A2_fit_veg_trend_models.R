@@ -73,7 +73,7 @@ con <- DBI::dbConnect(
 allotments <- tbl(con, 'allotments') %>% 
   select( uname, allot_name, admin_st, 
           parent_cd, parent_name, admu_name, 
-          ecogroup, acres, elevation) %>% 
+          ecogroup, acres) %>% 
   mutate( district_label = str_remove( parent_name, ' District.*$')) %>% 
   mutate( 
     office_label = str_remove_all(str_squish(str_trim (admu_name) ), 
@@ -85,7 +85,6 @@ annual_data <-
   filter( value > 0 ) %>% 
   left_join(allotments, by = 'uname') %>% 
   filter( ecogroup != "Coastal Forests")
-
 
 afg <- 
   annual_data %>% 
@@ -142,7 +141,6 @@ pfg_trends <- blm_trend_summary( pfg, pfg_fixed, pfg_random)
 
 saveRDS(m_pfg_npp, file = 'output/pfg_npp_trend_model.rds')
 write_csv(pfg_trends, file = 'output/pfg_group_npp_trends.csv')
-
 
 rm( afg, pfg, m_afg_npp, m_pfg_npp)
 
@@ -204,20 +202,18 @@ AFGC_trends <- blm_trend_summary( AFGC , ecogroup_effects, random_effects)
 
 # Fit perennial cover data 
 m_pfgc <- lmer(data = PFGC, basic_form, control = control)
-
 ecogroup_effects <- get_ecogroup_trends(m_pfgc ) 
 random_effects <- get_blm_random_effects( m_pfgc)
 PFGC_trends <- blm_trend_summary( PFGC, ecogroup_effects , random_effects)
 
 # Fit Bare ground cover --------
 m_bare <- lmer(data = BG, basic_form, control = control)
-
 ecogroup_effects <- get_ecogroup_trends(m_bare ) 
 random_effects <- get_blm_random_effects( m_bare)
 bare_trends <- blm_trend_summary( BG, ecogroup_effects , random_effects)
+
 # Fit Bare ground cover --------
 m_tree <- lmer(data = TREE, basic_form, control = control)
-
 ecogroup_effects <- get_ecogroup_trends(m_tree ) 
 random_effects <- get_blm_random_effects( m_tree)
 tree_trends <- blm_trend_summary( TREE, ecogroup_effects , random_effects)

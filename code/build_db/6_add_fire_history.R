@@ -3,8 +3,6 @@ library(sf)
 library(tidyverse)
 library(parallel)
 
-m2_per_ACRE <- 4046.8564224
-
 numcores <- 4
 
 mtbs <- st_read('~/Downloads/mtbs_perims_DD/mtbs_perims_DD.shp')
@@ -86,7 +84,7 @@ con <- DBI::dbConnect(
   port = '5432'
 )
 
-uname_year_combos %>% write_rds('data/temp/allotment_burns_by_year.rds')
+#uname_year_combos %>% write_rds('data/temp/allotment_burns_by_year.rds')
 
 uname_year_combos <- 
   uname_year_combos %>% 

@@ -19,7 +19,7 @@ con <- DBI::dbConnect(
 #dbRemoveTable(con, 'allotment_centroids')
 #dbRemoveTable(con, 'allotment_shapes')
 #dbRemoveTable(con, 'annual_data')
-dbRemoveTable(con, 'allotments')
+#dbRemoveTable(con, 'allotments')
 
 allotment_info <- readRDS(file = 'data/temp/allotment_info.rds') %>%
   ungroup() 
