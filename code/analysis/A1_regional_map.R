@@ -42,7 +42,7 @@ allotment_shapes <-
   summarise( SHAPE = st_union( SHAPE)) %>% 
   st_make_valid()
 
-#write_rds( allotment_shapes, file = 'data/temp/allotments_by_ecogroup_for_mapping.RDS' )
+write_rds( allotment_shapes, file = 'data/temp/allotments_by_ecogroup_for_mapping.RDS' )
 allotment_shapes <- read_rds(file = 'data/temp/allotments_by_ecogroup_for_mapping.RDS')
 
 # Make Maps 
@@ -73,5 +73,5 @@ regional_map <- state_layer %>%
 
 
 regional_map + 
-  ggsave( filename = 'output/figures/fig_1_region_map_with_allotments.png',
+  ggsave( filename = 'output/figures/Fig_1_Region_Map.png',
           width = 8, height = 7, units = 'in', dpi = 'print')

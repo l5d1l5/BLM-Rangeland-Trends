@@ -8,13 +8,6 @@ library(emmeans)
 library(GGally)
 source('code/analysis/plot_tools.R')
 
-# LMER options 
-control = lmerControl(optimizer = "optimx", 
-                      calc.derivs = FALSE,
-                      optCtrl = list(method = "nlminb", 
-                                     starttests = FALSE, 
-                                     kkt = FALSE))
-
 con <- DBI::dbConnect(
   RPostgres::Postgres(),
   dbname = 'blm', 
@@ -25,7 +18,7 @@ con <- DBI::dbConnect(
 allotments <- tbl(con, 'allotments') %>% 
   select( uname, allot_name, admin_st, 
           parent_cd, parent_name, admu_name, 
-          ecogroup, acres, elevation) %>% 
+          ecogroup, acres) %>% 
   mutate( district_label = str_remove( parent_name, ' District.*$')) %>% 
   mutate( 
     office_label = str_remove_all(str_squish(str_trim (admu_name) ), 
@@ -45,57 +38,56 @@ all_res <- do.call(rbind, res )
 full_pairs_plot <- all_res %>% 
   select( full_trend, uname, ecogroup, type ) %>% 
   pivot_wider(names_from = type, values_from = full_trend) %>% 
-  ggpairs(columns = c(3:7)) 
+  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
 
 allotment_pairs_plot <- 
   all_res %>% 
   select( allotment_trend, uname, ecogroup, type ) %>% 
   pivot_wider(names_from = type, values_from = allotment_trend) %>% 
-  ggpairs(columns = c(3:7)) 
+  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
 
 office_pairs_plot <- 
   all_res %>% 
   distinct( office_trend, office_label, ecogroup, type ) %>% 
   pivot_wider(names_from = type, values_from = office_trend) %>% 
-  ggpairs(columns = c(3:7)) 
+  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
 
 district_pairs_plot <- 
   all_res %>% 
   distinct( district_trend, district_label, ecogroup, type ) %>% 
   pivot_wider(names_from = type, values_from = district_trend) %>%
-  ggpairs( columns = c(3:7))
+  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
 
 ecogroup_pairs_plot <- 
   all_res %>% 
   distinct( ecogroup_trend, ecogroup, type ) %>% 
   pivot_wider(names_from = type, values_from = ecogroup_trend) %>%
-  ggpairs( columns = c(2:6))
+  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
 
 
 ggsave(plot = full_pairs_plot, 
-       filename = 'output/figures/full_trend_cover_pairsplot.pdf', 
-         width = 10, height = 7 ) 
+       filename = 'output/figures/full_trend_cover_pairsplot.png', 
+         width = 10, height = 7, dpi = 'print') 
 
 
 ggsave(plot = allotment_pairs_plot, 
-       filename = 'output/figures/allotment_trend_cover_pairsplot.pdf', 
-       width = 10, height = 7 ) 
+       filename = 'output/figures/allotment_trend_cover_pairsplot.png', 
+       width = 10, height = 7, dpi = 'print') 
 
 
 ggsave(plot = office_pairs_plot, 
-       filename = 'output/figures/office_trend_cover_pairsplot.pdf', 
-       width = 10, height = 7 ) 
+       filename = 'output/figures/office_trend_cover_pairsplot.png', 
+       width = 10, height = 7, dpi = 'print') 
 
 
 ggsave(plot = district_pairs_plot, 
-       filename = 'output/figures/district_trend_cover_pairsplot.pdf', 
-       width = 10, height = 7 ) 
+       filename = 'output/figures/district_trend_cover_pairsplot.png', 
+       width = 10, height = 7, dpi = 'print') 
 
 
 ggsave(plot = ecogroup_pairs_plot, 
-       filename = 'output/figures/ecogroup_trend_cover_pairsplot.pdf', 
-       width = 10, height = 7 ) 
-
+       filename = 'output/figures/ecogroup_trend_cover_pairsplot.png', 
+       width = 10, height = 7, dpi = 'print') 
 
 
 # 
@@ -161,8 +153,8 @@ scale_comparison %>%
   ylab( 'Bare Ground Cover Trend') + 
   xlab( 'Annual Forb/Grass Cover Trend') + 
   theme_bw() + 
-  ggsave( filename = 'output/figures/BG_AFG_trend_correlations.pdf', 
-          width = 5, height = 5)
+  ggsave( filename = 'output/figures/BG_AFG_trend_correlations.png', 
+          width = 5, height = 5, dpi = 'print')
 
 # PFG to BG comparison 
 PFG_BG_correlations <- 
@@ -227,8 +219,8 @@ scale_comparison %>%
   ylab( 'Bare Ground Cover Trend') + 
   xlab( 'Perennial Forb/Grass Cover Trend') + 
   theme_bw() + 
-  ggsave( filename = 'output/figures/BG_PFG_trend_correlations.pdf', 
-          width = 5, height = 5)
+  ggsave( filename = 'output/figures/BG_PFG_trend_correlations.png', 
+          width = 5, height = 5, dpi = 'print')
 
 
 # AFG to PFG trend correlations 
@@ -294,15 +286,15 @@ scale_comparison %>%
   ylab( 'Bare Ground Cover Trend') + 
   xlab( 'Perennial Forb/Grass Cover Trend') + 
   theme_bw() + 
-  ggsave( filename = 'output/figures/AFG_PFG_trend_correlations.pdf', 
-          width = 5, height = 5)
+  ggsave( filename = 'output/figures/AFG_PFG_trend_correlations.png', 
+          width = 5, height = 5, dpi = 'print')
 
 
 
 # 
 bare_m <- read_rds('output/BG_cover_trend_model.rds')
 BG_trends<- read_csv( file = 'output/BG_cover_group_trends.csv' ) 
-
+AFGC_trends <- read_csv(file = 'output/AFG_cover_group_trends.csv')
 
 BG_trends %>% 
   left_join(AFGC_trends %>% select( - ecogroup, -district_label, -office_label ), 
@@ -324,7 +316,6 @@ BG_trends %>%
   geom_point() + 
   geom_smooth( method = 'lm', se = F) + 
   facet_wrap( ~ ecogroup )
-
 
 BG_trends %>%
   distinct( ecogroup_trend,  ecogroup ) %>% 

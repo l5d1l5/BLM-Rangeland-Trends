@@ -96,7 +96,8 @@ afg <-
   collect() %>% 
   as.data.frame() %>% 
   mutate( value2 = scale(log(value))) %>%
-  mutate( year2 = scale(year)) 
+  mutate( year2 = scale(year, scale = F)) %>% 
+  mutate( value1 = log(value))
 
 pfg <- 
   annual_data %>% 
@@ -108,7 +109,8 @@ pfg <-
   collect() %>% 
   as.data.frame() %>% 
   mutate( value2 = scale(log(value))) %>%
-  mutate( year2 = scale(year)) 
+  mutate( year2 = scale(year, scale = F))  %>% 
+  mutate( value1 = log(value)) 
 
 afg_attributes <- attributes( afg$value2)
 pfg_attributes <- attributes( pfg$value2)
@@ -118,31 +120,29 @@ stopifnot(
   all.equal( back_transform(afg$value2[1:10], afg_attributes), 
              afg$value[1:10] ) ) 
 
-m_afg_npp <- lmer(data = afg,           
+m_afg_agb <- lmer(data = afg,           
            basic_form, 
           control = control)
 
-summary(m_afg_npp)
-
-afg_fixed <- get_ecogroup_trends(m_afg_npp)
-afg_random <- get_blm_random_effects(m_afg_npp)
+afg_fixed <- get_ecogroup_trends(m_afg_agb)
+afg_random <- get_blm_random_effects(m_afg_agb)
 afg_trends <- blm_trend_summary( afg, afg_fixed, afg_random)
 
-saveRDS(m_afg_npp, file = 'output/afg_npp_trend_model.rds')
-write_csv(afg_trends, file = 'output/afg_group_npp_trends.csv')
+saveRDS(m_afg_agb, file = 'output/afg_agb_trend_model.rds')
+write_csv(afg_trends, file = 'output/afg_group_agb_trends.csv')
 
 # PFG Trends 
-m_pfg_npp <- lmer(data = pfg, basic_form, control = control)
-summary(m_pfg_npp)
+m_pfg_agb <- lmer(data = pfg, basic_form, control = control)
+summary(m_pfg_agb)
 
-pfg_fixed <- get_ecogroup_trends(m_pfg_npp)
-pfg_random <- get_blm_random_effects(m_pfg_npp)
+pfg_fixed <- get_ecogroup_trends(m_pfg_agb)
+pfg_random <- get_blm_random_effects(m_pfg_agb)
 pfg_trends <- blm_trend_summary( pfg, pfg_fixed, pfg_random)
 
-saveRDS(m_pfg_npp, file = 'output/pfg_npp_trend_model.rds')
-write_csv(pfg_trends, file = 'output/pfg_group_npp_trends.csv')
+saveRDS(m_pfg_agb, file = 'output/pfg_agb_trend_model.rds')
+write_csv(pfg_trends, file = 'output/pfg_group_agb_trends.csv')
 
-rm( afg, pfg, m_afg_npp, m_pfg_npp)
+rm( afg, pfg, m_afg_agb, m_pfg_agb)
 
 # Cover trends: 
 cover <- 
@@ -159,7 +159,7 @@ AFGC <- cover %>%
   collect() %>% 
   as.data.frame() %>% 
   mutate( value2 = scale(log(value))) %>%
-  mutate( year2 = scale(year)) 
+  mutate( year2 = scale(year, scale = F)) 
 
 PFGC <- cover %>% 
   filter( type == 'PFGC') %>%
@@ -167,7 +167,7 @@ PFGC <- cover %>%
   collect() %>% 
   as.data.frame() %>% 
   mutate( value2 = scale(log(value))) %>%
-  mutate( year2 = scale(year)) 
+  mutate( year2 = scale(year, scale = F)) 
 
 BG <- cover %>% 
   filter( type == 'BG') %>%
@@ -175,7 +175,7 @@ BG <- cover %>%
   collect() %>% 
   as.data.frame() %>% 
   mutate( value2 = scale(log(value))) %>%
-  mutate( year2 = scale(year)) 
+  mutate( year2 = scale(year, scale = F)) 
 
 TREE <- cover %>% 
   filter( type == 'TREE') %>%
@@ -183,7 +183,7 @@ TREE <- cover %>%
   collect() %>% 
   as.data.frame() %>% 
   mutate( value2 = scale(log(value))) %>%
-  mutate( year2 = scale(year)) 
+  mutate( year2 = scale(year, scale = F)) 
 
 
 SHR <- cover %>% 
@@ -192,7 +192,7 @@ SHR <- cover %>%
   collect() %>% 
   as.data.frame() %>% 
   mutate( value2 = scale(log(value))) %>%
-  mutate( year2 = scale(year)) 
+  mutate( year2 = scale(year, scale = F)) 
 
 # Fit annual cover data 
 m_afgc <- lmer(data = AFGC, basic_form, control = control)

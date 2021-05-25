@@ -22,94 +22,32 @@ allotments <-
          admu_name,
          admin_st, 
          parent_cd, 
-         parent_name, ecogroup, acres, elevation)
+         parent_name, ecogroup, acres)
 
-# Cover trends: 
-
+# Cover data ---------------- #
 cover <- tbl(con, 'annual_data') %>%  
   filter( type %in% c('AFGC', 'PFGC', 'BG', 'TREE', 'SHR')) %>% 
   left_join(allotments, by = 'uname')
 
-
-top_allots <- 
-  cover %>% 
-  filter( admin_st == 'MT'  & 
-            admu_name =='Miles City Field Office') %>% 
-  distinct(admu_name, allot_name, uname, acres ) %>% 
-  arrange( desc(acres )) 
-
-example_ts <- 
-  cover %>% 
-  filter( uname %in% c(7094, 8384, 7179)) %>% 
-  collect() %>%
-  as.data.frame() %>% 
-  mutate( type_label = factor(type, labels = c('Annual', 'Bare', 'Perennial', 'Shrub', 'Tree')))
-
-example_ts %>% 
-  mutate( type = type_label) %>% 
-  plot_single_allotment_trends(my_colors = my_colors) +
-  scale_y_continuous(name = 'Cover (%)') + 
-  facet_wrap(~ allot_name, ncol = 1 ) + 
-  ggtitle(label = 'Example Allotments, Miles City, MT')
-
-allots <- read_sf(con, 'allotment_shapes') %>%
-  filter( uname %in% c(7094, 8384, 7179)) 
-
-allots %>% 
-  left_join(example_ts %>% distinct(uname, allot_name), by = 'uname') %>% 
-  ggplot() + 
-  geom_sf() + 
-  theme_bw()
-
-
-# Production 
+# AGB data ------------------- #  
 prod <- tbl(con, 'annual_data') %>%  
   filter( type %in% c('afgAGB', 'pfgAGB')) %>% 
   left_join(allotments, by = 'uname')
 
-example_ts <- 
-  prod %>% 
-  filter( uname %in% c(7094, 8384, 7179)) %>% 
-  collect() %>%
-  as.data.frame() %>%
-  mutate( type = factor(type, labels =c( 'Annual', 'Perennial')))
 
-
-example_ts %>% 
-  plot_single_allotment_trends(my_colors = my_colors) +
-  #geom_smooth(data = example_ts %>% filter( year >= 2000), aes( group = type ), 
-  #            method = 'lm', se = F, lty = 1, size = 0.5) + 
-  scale_y_continuous(name = 'Production (lbs per acre)') + 
-  facet_wrap(~ allot_name, ncol = 1 ) + 
-  ggtitle(label = 'Example Allotments, Miles City, MT') + 
-  ggsave(filename = 'output/figures/fig5a_AGB_example_production_trends_MilesCity.pdf', 
-         height = 7, width = 10, units = 'in') 
-
-example_ts %>% 
-  plot_single_allotment_trends(my_colors = my_colors) +
-  geom_smooth(data = example_ts %>% filter( year >= 2000), aes( group = type ), 
-              method = 'lm', se = F, lty = 1, size = 0.5) + 
-  scale_y_continuous(name = 'Production (lbs per acre)') + 
-  facet_wrap(~ allot_name, ncol = 1 ) + 
-  ggtitle(label = 'Example Allotments, Miles City, MT') + 
-  ggsave(filename = 'output/figures/fig5b_AGB_example_production_trends_with_trendlines_MilesCity.pdf', 
-         height = 7, width = 10, units = 'in') 
-
-
-# 
 # Biomass Trends
-npp_model_files <- dir(path = 'output', pattern = '.*_npp_trend_model.rds', full.names = T)
-npp_models <- lapply(npp_model_files, read_rds)
-types  <- c( str_extract( npp_model_files, pattern = '[a-z]fg') )
+agb_model_files <- dir(path = 'output', pattern = '.*_agb_trend_model.rds', full.names = T)
+agb_models <- lapply(agb_model_files, read_rds)
+types  <- c( str_extract( agb_model_files, pattern = '[a-z]fg') )
 types <- factor(types, labels = c('Annual', 'Perennial'))
-trend_table <- mapply( x = npp_models, y = types, FUN = function(x,y) ecogroup_trends_as_df(x, y), SIMPLIFY = F)
+trend_table <- mapply( x = agb_models, y = types, FUN = function(x,y) ecogroup_trends_as_df(x, y), SIMPLIFY = F)
 trend_table <- do.call(rbind, trend_table)
 
 trend_table %>% 
   plot_ecogroup_trend_coefficients(my_colors = my_colors) + 
-  ggtitle( 'Linear Trends in Allotment NPP 1991 - 2019') +
-  ggsave(filename = 'output/figures/fig6a_NPP_trend_coefficients_by_Ecoregion.pdf', 
-         height = 7, width = 10, units = 'in') 
+  ggtitle( 'Trends in Allotment Biomass 1991 - 2020') +
+  ggsave(filename = 'output/figures/Fig_2_AGB_trend_coefficients_by_Ecoregion.png', 
+         height = 5, width = 8, units = 'in', dpi = 'print') 
 
 # cover trends: 
 cover_model_files <- dir(path = 'output', pattern = '.*_cover_trend_model.rds', full.names = T)
@@ -133,17 +71,17 @@ woody_trend_coefficient_plot <-
 
 
 nonWoody_trend_coefficient_plot +
-  ggtitle( 'Trends in Allotment Cover 1991 - 2019') +  
-  ggsave(filename = 'output/figures/fig6b_nonWoody_cover_trend_coefficients_by_Ecoregion.pdf', 
-          height = 7, width = 10, units = 'in') 
+  ggtitle( 'Trends in Allotment Cover 1991 - 2020') +  
+  ggsave(filename = 'output/figures/Fig_3a_nonWoody_cover_trend_coefficients_by_Ecoregion.png', 
+         height = 5, width = 8, units = 'in', dpi = 'print') 
 
 woody_trend_coefficient_plot +
   ggtitle( 'Trends in Allotment Cover 1991 - 2019') + 
-  ggsave(filename = 'output/figures/fig6c_woody_cover_trend_coefficients_by_Ecoregion.pdf', 
-         height = 7, width = 10, units = 'in') 
+  ggsave(filename = 'output/figures/Fig_3b_woody_cover_trend_coefficients_by_Ecoregion.png', 
+         height = 5, width = 8, units = 'in', dpi = 'print') 
 
 
-# Variance partitioning
+# Variance partitioning -------------------------------- 
 vc <- lapply(cover_models, VarCorr)
 vc <- lapply( vc, data.frame )
 vc <- mapply( x = types, y = vc, function(x, y) {y$type <- x; return(y)}, SIMPLIFY = F)
@@ -152,9 +90,7 @@ cover_models[[1]] %>%
   VarCorr %>% 
   data.frame()
 
-
 AFGC <- cover_models[[1]]@frame
-
 
 vc %>% bind_rows() %>% 
   filter( var1 == 'year2') %>% group_by( type) %>% 
@@ -162,10 +98,9 @@ vc %>% bind_rows() %>%
   ggplot( aes( x = type, y = pvcov,fill = grp)) + 
   geom_bar(stat = 'identity')  
 
+agb_types  <- c( str_extract( agb_model_files, pattern = '[a-z]fg') )
 
-agb_types  <- c( str_extract( npp_model_files, pattern = '[a-z]fg') )
-
-vc_agb <- lapply( npp_models, VarCorr) 
+vc_agb <- lapply( agb_models, VarCorr) 
 vc_agb <- lapply( vc_agb, data.frame)
 vc_agb <- mapply( x = agb_types, y = vc_agb, function(x,y){y$type <- x; return(y)}, SIMPLIFY = F)
 
@@ -188,78 +123,58 @@ trend_variance %>%
   theme_bw() + 
   theme(axis.text.x = element_text(angle = 60,hjust = 1), axis.title.x = element_blank()) + 
   ylab( 'Proportion of variance in trend coefficient') +
-  ggsave(filename = 'output/figures/fig9_trend_variance.pdf', 
-         height = 6, width = 7, units = 'in')
+  ggsave(filename = 'output/figures/fig9_trend_variance.png', 
+         height = 5, width = 8, units = 'in', dpi = 'print') 
 
 
-# Fire trends 
-burn_binom_model <- read_rds('output/burn_binom_trend_model.rds')
-burn_area_model <- read_rds('output/burn_area_poisson_model.rds')
+# Example single allotment timeseries ---------
 
-ecogroup_trend <- ecogroup_trends_as_df(burn_binom_model, type = 'burned')
-ecogroup_trend_area <- ecogroup_trends_as_df(burn_area_model, type = 'burned')
+top_allots <- 
+  cover %>% 
+  filter( admin_st == 'MT'  & 
+            admu_name =='Miles City Field Office') %>% 
+  distinct(admu_name, allot_name, uname, acres ) %>% 
+  arrange( desc(acres )) 
 
-plot_ecogroup_trend_coefficients(ecogroup_trend, 
-                                 my_colors = c('burned' = 'black')) + 
-  ggtitle('Trends in Burn Probability 1991 - 2019') + 
-  ggsave( filename = 'output/figures/fig7a_burn_frequency_trend_coefficients_by_Ecoregion.pdf', 
-          height = 7, width = 10, units = 'in')
+example_ts <- 
+  cover %>% 
+  filter( uname %in% c(7094, 8384, 7179)) %>% 
+  collect() %>%
+  as.data.frame() %>% 
+  mutate( type_label = factor(type, labels = c('Annual', 'Bare', 'Perennial', 'Shrub', 'Tree')))
 
-plot_ecogroup_trend_coefficients(ecogroup_trend_area, 
-                                 my_colors = c('burned' = 'black')) + 
-  ggtitle('Trends in Burned Area per Ecoregion 1991 - 2019') + 
-  ggsave(filename = 'output/figures/fig8a_burned_area_trend_coefficients_by_Ecoregion.pdf', 
-         height = 7, width = 10, units = 'in')
+example_ts %>% 
+  mutate( type = type_label) %>% 
+  plot_single_allotment_trends(my_colors = my_colors) +
+  scale_y_continuous(name = 'Cover (%)') + 
+  facet_wrap(~ allot_name, ncol = 1 ) + 
+  ggtitle(label = 'Example Allotments, Miles City, MT')
 
-
-fire_dat <- burn_area_model@frame
-year2 <- fire_dat$year2
-year2
-attr_obj <- attributes(year2)[2:3]
-
-library( lme4)
-
-pred_frame <- 
-  fire_dat %>% 
-  distinct( year2, ecogroup ) %>%
-  mutate( year = back_transform(year2, 
-                                attributes_obj = attributes( year2), 
-                                log = F)) 
-
-mean_offset <- mean(fire_dat$`(offset)`)
-pred_frame$`(offset)` <- mean_offset
-pred_frame$log_area <- mean_offset
-
-pred_frame %>% head
-
-burn_area_model
-
-pred_frame$burned_area <- predict(burn_area_model, 
-                           newdata = pred_frame, 
-                           re.form = NA, 
-                           type = 'response')
-
-pred_frame %>%
-  ggplot( aes( x = year, y = burned_area, color = ecogroup)) + 
-  geom_line()  + 
-  facet_wrap( ~ecogroup)
-
-burn_data %>% 
-  mutate( year = back_transform(year2, attributes_obj = attributes( year2), log = F)) %>% 
-  mutate( year = as.numeric(year)) %>% 
-  group_by( year, ecogroup ) %>% 
-  summarise( p_burned = sum(has_burned)/n() )   %>% 
-  ggplot( aes( x = year, y = p_burned, color = ecogroup)) + 
-  stat_summary( fun  = 'mean', geom = 'line') + 
-  facet_wrap(~ecogroup)
+example_ts <- 
+  prod %>% 
+  filter( uname %in% c(7094, 8384, 7179)) %>% 
+  collect() %>%
+  as.data.frame() %>%
+  mutate( type = factor(type, labels =c( 'Annual', 'Perennial')))
 
 
-burn_data %>% 
-  mutate( year = back_transform(year2, attributes_obj = attributes( year2), log = F)) %>% 
-  mutate( year = as.numeric(year)) %>% 
-  group_by( year, ecogroup ) %>% 
-  summarise( p_burned = sum(has_burned)/n() )   %>% 
-  ggplot( aes( x = year, y = p_burned, color = ecogroup)) + 
-  stat_summary( fun  = 'mean', geom = 'line') + 
-  facet_wrap(~ecogroup)
-
+# example_ts %>% 
+#   plot_single_allotment_trends(my_colors = my_colors) +
+#   #geom_smooth(data = example_ts %>% filter( year >= 2000), aes( group = type ), 
+#   #            method = 'lm', se = F, lty = 1, size = 0.5) + 
+#   scale_y_continuous(name = 'Production (lbs per acre)') + 
+#   facet_wrap(~ allot_name, ncol = 1 ) + 
+#   ggtitle(label = 'Example Allotments, Miles City, MT') + 
+#   ggsave(filename = 'output/figures/fig5a_AGB_example_production_trends_MilesCity.pdf', 
+#          height = 7, width = 10, units = 'in') 
+# 
+# example_ts %>% 
+#   plot_single_allotment_trends(my_colors = my_colors) +
+#   geom_smooth(data = example_ts %>% filter( year >= 2000), aes( group = type ), 
+#               method = 'lm', se = F, lty = 1, size = 0.5) + 
+#   scale_y_continuous(name = 'Production (lbs per acre)') + 
+#   facet_wrap(~ allot_name, ncol = 1 ) + 
+#   ggtitle(label = 'Example Allotments, Miles City, MT') + 
+#   ggsave(filename = 'output/figures/fig5b_AGB_example_production_trends_with_trendlines_MilesCity.pdf', 
+#          height = 7, width = 10, units = 'in') 
+# 
