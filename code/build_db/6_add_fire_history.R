@@ -84,6 +84,8 @@ con <- DBI::dbConnect(
   port = '5432'
 )
 
+
+#dbRemoveTable(con, 'annual_burns')
 #uname_year_combos %>% write_rds('data/temp/allotment_burns_by_year.rds')
 
 uname_year_combos <- 

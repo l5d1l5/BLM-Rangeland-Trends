@@ -14,6 +14,7 @@ con <- DBI::dbConnect(
     port = '5432'
   )
 
+
 #  Load annual data exported from Earth Engine 
 AGB <- read_csv('data/RAP_EE_exports/allotment_biomass_by_year.csv') %>% 
   select( uname, year, contains('agb'))
@@ -106,7 +107,7 @@ NPP_16 <- read_csv('data/RAP_EE_exports/allotment_16_day_NPP.csv') %>%
   select(uname, year, doy, afgNPP, pfgNPP) %>% 
   rename( 'afg' = afgNPP, 'pfg' = pfgNPP )
 
-dbRemoveTable(con, 'npp_16')
+#dbRemoveTable(con, 'agb_16')
 
 create_table_query <- 
   str_squish( str_remove_all("

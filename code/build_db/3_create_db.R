@@ -16,15 +16,20 @@ con <- DBI::dbConnect(
 )
 
 # if exists must remove other allotment tables 
-#dbRemoveTable(con, 'allotment_centroids')
-#dbRemoveTable(con, 'allotment_shapes')
-#dbRemoveTable(con, 'annual_data')
-#dbRemoveTable(con, 'allotments')
+# dbRemoveTable(con, 'annual_data')
+# dbRemoveTable(con, 'annual_burns')
+# dbRemoveTable(con, 'annual_climate')
+# dbRemoveTable(con, 'elevation')
+# dbRemoveTable(con, 'npp_16')
+# dbRemoveTable(con, 'ecogroup')
+# dbRemoveTable(con, 'allotments')
 
-allotment_info <- readRDS(file = 'data/temp/allotment_info.rds') %>%
-  ungroup() 
+allotment_info <- 
+  readRDS(file = 'data/temp/allotment_info.rds') %>% 
+  mutate( acres = as.numeric(acres ))
 
-allotment_info <- allotment_info %>% select( uname, allot_no, allot_name, 
+allotment_info <- allotment_info %>% 
+  select( uname, allot_no, allot_name, 
                            last_date, area, acres, 
                            adm_unit_cd, admin_st, admu_name,
                            parent_cd, parent_name, lon, lat) %>% 
