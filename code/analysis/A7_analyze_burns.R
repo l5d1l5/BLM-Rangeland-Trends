@@ -23,50 +23,42 @@ con <- DBI::dbConnect(
   port = '5432'
 )
 
-
-allotments <- tbl(con, 'allotments') %>% 
-  select( uname, allot_name, admin_st, 
-          parent_cd, parent_name, admu_name, 
-          ecogroup, area, acres) %>% 
+burn_data <- tbl(con, 'annual_data') %>% 
+  distinct(uname, year) %>% 
+  filter( year  >1990, year < 2020) %>%
+  left_join(tbl(con, 'allotments'), by = 'uname') %>% 
   mutate( district_label = str_remove( parent_name, ' District.*$')) %>% 
-  mutate( 
-    office_label = str_remove_all(str_squish(str_trim (admu_name) ), 
-                                  pattern = c(' Field.*$'))) %>%
-  filter( ecogroup != 'Coastal Forests')
-
-burn_data <- allotments %>% 
-  left_join( tbl(con, 'annual_data') %>% 
-               filter( type == 'PFGC')) %>%
-  filter( year > 1990 ) %>%
-  select( year, uname, ecogroup, area, district_label, office_label) %>% 
-  left_join( tbl(con, 'annual_burns')) %>% 
+  mutate( office_label = str_remove_all(str_squish(str_trim (admu_name) ), 
+                                        pattern = c(' Field.*$'))) %>%
+  filter( ecogroup != 'Coastal Forests') %>% 
+  dplyr::select( year, uname, ecogroup, area, district_label, office_label) %>% 
+  left_join( tbl(con, 'annual_burns'), by = c('year', 'uname')) %>% 
   mutate( area_burned = ifelse( is.na(area_burned), 0, area_burned)) %>% 
   mutate( num_fires = ifelse( is.na(num_fires), 0, num_fires)) %>% 
-  mutate( year2 = year - 2000 )  %>% 
+  mutate( year2 = year - 2005 )  %>% 
   mutate( burned_binary = num_fires  > 0 ) %>%
   mutate( area_km2 = area/1e6) %>% 
   mutate( area_burned_km2 = area_burned/1e6 ) %>%
   mutate( log_area_km2 = log(area_km2)) %>% 
   ungroup() 
 
-
 # office-level analyses: ------------------------------
 burns_per_office <- 
-  burn_data %>% 
-  collect() %>%
+  burn_data %>%
+  ungroup() %>% 
+  collect() %>% 
   mutate( burned_binary = as.integer(burned_binary)) %>% 
   group_by( year, 
             year2, 
             office_label, 
             district_label, 
             ecogroup ) %>% 
-  summarise( n_burns = sum( burned_binary ) , 
+  summarise( n_burns = sum( burned_binary, na.rm = T ) , 
              n_allots = n(), 
              area_km2 = sum(area_km2), 
              area_burned_km2 = sum(area_burned_km2)) %>%
   mutate( log_area_km2 = log(area_km2) ) %>% 
-  mutate( area_burned_km2_int = as.integer( 
-    round( area_burned_km2 ) ))
+  mutate( area_burned_km2_int = as.integer(round(area_burned_km2 )))  
 
 # formulae 
 num_burns_form <- formula( n_burns ~ year2*ecogroup )
@@ -74,7 +66,6 @@ num_burns_form_mer_full <-
   formula( n_burns ~ year2*ecogroup + (year2|office_label) + (year2|district_label)) 
 num_burns_form_mer_simple <- 
   formula( n_burns ~ year2*ecogroup + (1|office_label) + (year2|district_label)) 
-
 burns_per_office_sample <- burns_per_office %>% ungroup() %>% filter(row_number() <= 2000 )
 
 any(is.na(burns_per_office$n_burns))
