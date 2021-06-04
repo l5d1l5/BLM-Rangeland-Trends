@@ -43,6 +43,12 @@ types <- factor(types, labels = c('Annual', 'Perennial'))
 trend_table <- mapply( x = agb_models, y = types, FUN = function(x,y) ecogroup_trends_as_df(x, y), SIMPLIFY = F)
 trend_table <- do.call(rbind, trend_table)
 
+ecogroup_agb <- get_ecogroup_trends(agb_models[[1]])
+group_agb <- get_blm_random_effects(agb_models[[1]])
+agb_df1 <- agb_models[[1]]@frame
+
+
+
 trend_table %>% 
   plot_ecogroup_trend_coefficients(my_colors = my_colors) + 
   ggtitle( 'Trends in Allotment Biomass 1991 - 2020') +

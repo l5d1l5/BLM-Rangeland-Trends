@@ -34,7 +34,6 @@ res <- mapply( x = res, y = types, function(x, y) data.frame(x, type = y), SIMPL
 
 all_res <- do.call(rbind, res )
 
-
 full_pairs_plot <- all_res %>% 
   select( full_trend, uname, ecogroup, type ) %>% 
   pivot_wider(names_from = type, values_from = full_trend) %>% 
@@ -42,8 +41,8 @@ full_pairs_plot <- all_res %>%
 
 allotment_pairs_plot <- 
   all_res %>% 
-  select( allotment_trend, uname, ecogroup, type ) %>% 
-  pivot_wider(names_from = type, values_from = allotment_trend) %>% 
+  select( allot_trend, uname, ecogroup, type ) %>% 
+  pivot_wider(names_from = type, values_from = allot_trend) %>% 
   ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
 
 office_pairs_plot <- 
@@ -64,42 +63,37 @@ ecogroup_pairs_plot <-
   pivot_wider(names_from = type, values_from = ecogroup_trend) %>%
   ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
 
-
 ggsave(plot = full_pairs_plot, 
        filename = 'output/figures/full_trend_cover_pairsplot.png', 
          width = 10, height = 7, dpi = 'print') 
-
 
 ggsave(plot = allotment_pairs_plot, 
        filename = 'output/figures/allotment_trend_cover_pairsplot.png', 
        width = 10, height = 7, dpi = 'print') 
 
-
 ggsave(plot = office_pairs_plot, 
        filename = 'output/figures/office_trend_cover_pairsplot.png', 
        width = 10, height = 7, dpi = 'print') 
-
 
 ggsave(plot = district_pairs_plot, 
        filename = 'output/figures/district_trend_cover_pairsplot.png', 
        width = 10, height = 7, dpi = 'print') 
 
-
 ggsave(plot = ecogroup_pairs_plot, 
        filename = 'output/figures/ecogroup_trend_cover_pairsplot.png', 
        width = 10, height = 7, dpi = 'print') 
-
 
 # 
 AFG_BG_correlations <- 
   all_res %>% 
   filter(type %in% c('AFG', 'BG')) %>% 
-  select(ecogroup, district_label, office_label, uname, type, allotment_trend, office_trend, district_trend, ecogroup_trend, full_trend )
+  select(ecogroup, district_label, office_label, uname, type, allot_trend, 
+         office_trend, district_trend, ecogroup_trend, full_trend )
 
 scale_comparison <- 
   AFG_BG_correlations %>% 
-  distinct(type, uname, allotment_trend) %>%
-  pivot_wider(names_from = type, values_from = allotment_trend ) %>% 
+  distinct(type, uname, allot_trend) %>%
+  pivot_wider(names_from = type, values_from = allot_trend ) %>% 
   mutate( scale = 'Allotment') %>% 
   rename( label = uname) %>% 
   mutate( label = as.character(label)) %>% 
@@ -160,12 +154,13 @@ scale_comparison %>%
 PFG_BG_correlations <- 
   all_res %>% 
   filter(type %in% c('PFG', 'BG')) %>% 
-  select(ecogroup, district_label, office_label, uname, type, allotment_trend, office_trend, district_trend, ecogroup_trend, full_trend )
+  select(ecogroup, district_label, office_label, uname, type, allot_trend, 
+         office_trend, district_trend, ecogroup_trend, full_trend )
 
 scale_comparison <- 
   PFG_BG_correlations %>% 
-  distinct(type, uname, allotment_trend) %>%
-  pivot_wider(names_from = type, values_from = allotment_trend ) %>% 
+  distinct(type, uname, allot_trend) %>%
+  pivot_wider(names_from = type, values_from = allot_trend ) %>% 
   mutate( scale = 'Allotment') %>% 
   rename( label = uname) %>% 
   mutate( label = as.character(label)) %>% 
@@ -227,12 +222,13 @@ scale_comparison %>%
 PFG_AFG_correlations <- 
   all_res %>% 
   filter(type %in% c('AFG', 'PFG')) %>% 
-  select(ecogroup, district_label, office_label, uname, type, allotment_trend, office_trend, district_trend, ecogroup_trend, full_trend )
+  select(ecogroup, district_label, office_label, uname, type, 
+         allot_trend, office_trend, district_trend, ecogroup_trend, full_trend )
 
 scale_comparison <- 
   PFG_AFG_correlations %>% 
-  distinct(type, uname, allotment_trend) %>%
-  pivot_wider(names_from = type, values_from = allotment_trend ) %>% 
+  distinct(type, uname, allot_trend) %>%
+  pivot_wider(names_from = type, values_from = allot_trend ) %>% 
   mutate( scale = 'Allotment') %>% 
   rename( label = uname) %>% 
   mutate( label = as.character(label)) %>% 
@@ -290,7 +286,6 @@ scale_comparison %>%
           width = 5, height = 5, dpi = 'print')
 
 
-
 # 
 bare_m <- read_rds('output/BG_cover_trend_model.rds')
 BG_trends<- read_csv( file = 'output/BG_cover_group_trends.csv' ) 
@@ -305,12 +300,12 @@ BG_trends %>%
   facet_wrap( ~ ecogroup ) 
 
 BG_trends %>%
-  select( uname, allotment_trend, ecogroup ) %>% 
-  rename( BG_trend = allotment_trend ) %>% 
+  select( uname, allot_trend, ecogroup ) %>% 
+  rename( BG_trend = allot_trend ) %>% 
   left_join(
     AFGC_trends %>% 
-      select( uname, allotment_trend) %>% 
-      rename( AFGC_trend = allotment_trend) 
+      select( uname, allot_trend) %>% 
+      rename( AFGC_trend = allot_trend) 
   ) %>% 
   ggplot( aes( x = AFGC_trend, y = BG_trend )) + 
   geom_point() + 

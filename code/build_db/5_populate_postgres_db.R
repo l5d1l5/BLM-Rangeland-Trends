@@ -22,7 +22,7 @@ AGB <- read_csv('data/RAP_EE_exports/allotment_biomass_by_year.csv') %>%
 cover <- read_csv( 'data/RAP_EE_exports/allotment_cover_by_year.csv') %>% 
   select( uname, year, AFGC, BG, LTR, PFGC, SHR, TREE)
 
-elevation <- read_csv('data/RAP_EE_exports/allotment_elevation.csv', n_max = 10)  %>% 
+elevation <- read_csv('data/RAP_EE_exports/allotment_elevation.csv')  %>% 
   select( uname, mean )
 
 
@@ -55,16 +55,15 @@ RPostgres::dbWriteTable(con,
 
 rm(annual_data)
 
-elevation <- elevation %>% rename( 'value' = mean )
+elevation <- elevation %>% rename( 'elevation' = mean )
 
 create_table_query <- 
   str_squish( str_remove_all("
     CREATE TABLE elevation( 
       uname INT, 
-      value NUMERIC, 
+      elevation NUMERIC, 
       PRIMARY KEY(uname), 
       CONSTRAINT fk_uname FOREIGN KEY(uname) REFERENCES allotments(uname));", pattern = '\n'))
-
 
 RPostgres::dbSendQuery(con, create_table_query)
 
@@ -76,6 +75,7 @@ RPostgres::dbWriteTable(con,
                         append = T)
 
 
+rm(elevation)
 
 # CLIMATE ------------------------------------- # 
 climate <- read_csv('data/RAP_EE_exports/allotment_climate_by_year.csv') %>%

@@ -121,37 +121,43 @@ get_blm_random_effects <- function( model ) {
   out <- list( dist_effects, office_effects, allot_effects ) 
   names( out ) <- c("dist_effects", "office_effects", "allot_effects")
   
+  out$allot_effects$uname <- as.integer( row.names( out$allot_effects ) )
+  out$dist_effects$district_label <- row.names( out$dist_effects )
+  out$office_effects$office_label <- row.names( out$office_effects)
+  
+  out$dist_effects$district_trend <- out$dist_effects$year2
+  out$office_effects$office_trend <- out$office_effects$year2
+  out$allot_effects$allot_trend <- out$allot_effects$year2
+  
   return( out )
 } 
 
 
-blm_trend_summary <- function( my_data , ecogroup_effects,  random_effects ){ 
+blm_trend_summary <- function( my_data, ecogroup_trends, group_trends ){ 
   
-  if( length(random_effects$allot_effects) != 0 ){ 
-  trend_summary <- my_data %>% 
-    distinct(ecogroup, uname, office_label, district_label) %>% 
-    mutate( ecogroup_trend = ecogroup_effects[ ecogroup] ) %>% 
-    mutate( office_trend = random_effects$office_effects[office_label, ]$year2, 
-            district_trend = random_effects$dist_effects[district_label, ]$year2, 
-            allotment_trend = random_effects$allot_effects[uname, ]$year2) %>% 
-    rowwise() %>% 
-    mutate( full_trend = ecogroup_trend + 
-              district_trend + 
-              office_trend + allotment_trend) %>% 
-    dplyr::select( full_trend, office_trend, district_trend, allotment_trend, 
-            ecogroup_trend, ecogroup,  district_label, office_label, uname )
-  }else{ 
-    trend_summary <- my_data %>% 
-      distinct(ecogroup, office_label, district_label) %>% 
-      mutate( ecogroup_trend = ecogroup_effects[ ecogroup] ) %>% 
-      mutate( office_trend = random_effects$office_effects[office_label, ]$year2, 
-              district_trend = random_effects$dist_effects[district_label, ]$year2) %>% 
+  if( all( c('allot_effects', 'dist_effects', 'office_effects') %in% names(group_trends)) ){ 
+    my_data %>% 
+      distinct(ecogroup, district_label, office_label, uname) %>%
+      mutate( ecogroup_trend = ecogroup_trends[ecogroup]) %>%
+      left_join( group_trends$dist_effects, by = 'district_label') %>%
+      left_join( group_trends$office_effects, by = 'office_label') %>% 
+      left_join( group_trends$allot_effects, by = 'uname') %>%
+      dplyr::select( uname, ecogroup, district_label, office_label, 
+                     ecogroup_trend, district_trend, office_trend, allot_trend ) %>%
       rowwise() %>% 
-      mutate( full_trend = ecogroup_trend + 
-                district_trend + 
-                office_trend) %>% 
-      dplyr::select( full_trend, office_trend, district_trend, 
-              ecogroup_trend, ecogroup,  district_label, office_label)
+      mutate( full_trend = ecogroup_trend + district_trend + 
+                office_trend + allot_trend )
+  }else{ 
+    my_data %>% 
+      distinct(ecogroup, district_label, office_label) %>%
+      mutate( ecogroup_trend = ecogroup_trends[ecogroup]) %>%
+      left_join( group_trends$dist_effects, by = 'district_label') %>%
+      left_join( group_trends$office_effects, by = 'office_label') %>% 
+      dplyr::select(ecogroup, district_label, office_label, 
+                    ecogroup_trend, district_trend, office_trend) %>%
+      rowwise() %>% 
+      mutate( full_trend = ecogroup_trend + district_trend + office_trend )
   }
-  return(trend_summary) 
+  
+  
 }
