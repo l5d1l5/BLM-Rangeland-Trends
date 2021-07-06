@@ -117,6 +117,61 @@ allotment_info %>%
 allotment_info %>% 
   filter( is.na( ADMU_NAME))
 
+# Fix North Dakota and South Dakota field office allotments: 
+
+allotment_info %>% 
+  filter( ADMIN_ST == 'MT') %>% 
+  group_by(ADMIN_ST, ADMU_NAME  ) %>%
+  summarise( n_distinct(uname) ) # North dakota only has one allotment! 
+
+admin_office_info %>% filter( ADMU_NAME == 'NORTH DAKOTA FIELD OFFICE')
+admin_office_info %>% filter( ADMU_NAME == 'SOUTH DAKOTA FIELD OFFICE')
+
+# Show distribution of allotment field offices in ND and SD
+allotment_info %>% 
+  filter( ADMU_NAME %in% c( 'SOUTH DAKOTA FIELD OFFICE', 'NORTH DAKOTA FIELD OFFICE')) %>% 
+  select( uname, ADMU_NAME, lat, lon ) %>% 
+  st_as_sf(coords = c('lon', 'lat'), 
+           crs = 'epsg:4326') %>% 
+  st_transform(crs = st_crs( adm_offices)) %>% 
+  ggplot() + 
+  geom_sf(data = adm_offices %>% 
+            filter(ADMU_NAME %in% c( 'SOUTH DAKOTA FIELD OFFICE', 'NORTH DAKOTA FIELD OFFICE') ), 
+          aes( color = ADMU_NAME) ) + 
+  geom_sf( aes( color = ADMU_NAME)) + 
+  ggtitle("N. Dakota and S. Dakota -- original field office designation") +
+  ggsave(filename = 'output/figures/ND_SD_field_offices.png', 
+         width = 8, height = 8, units = 'in',dpi = 'print')
+
+# Re-assign all allotments in SD Field Office North of 46.3 Lon to ND field office
+allotment_info <- 
+  allotment_info %>% 
+  mutate( ADMU_NAME = ifelse( ADMU_NAME == 'SOUTH DAKOTA FIELD OFFICE' & lat >= 46.3, 
+                              'NORTH DAKOTA FIELD OFFICE', ADMU_NAME)) 
+#  ------------------------- # 
+
+allotment_info %>% 
+  filter( ADMIN_ST == "MT", 
+          ADMU_NAME %in% c( 'SOUTH DAKOTA FIELD OFFICE', 'NORTH DAKOTA FIELD OFFICE')) %>% 
+  select( uname, ADMU_NAME, lat, lon ) %>% 
+  st_as_sf(coords = c('lon', 'lat'), 
+           crs = 'epsg:4326') %>% 
+  st_transform(crs = st_crs( adm_offices)) %>% 
+  ggplot() +  
+  geom_sf(data = adm_offices %>% 
+            filter(ADMU_NAME %in% c( 'SOUTH DAKOTA FIELD OFFICE', 'NORTH DAKOTA FIELD OFFICE') ), 
+          aes( color = ADMU_NAME), alpha = 0.1 ) + 
+  geom_sf( aes( color = ADMU_NAME)) + 
+  ggtitle("N. Dakota and S. Dakota -- re-assigned field office designation") +
+  ggsave(filename = 'output/figures/ND_SD_field_offices2.png', 
+         width = 8, height = 8, units = 'in',dpi = 'print')
+
+
+allotment_info %>% 
+  filter( ADMIN_ST == 'MT') %>% 
+  group_by(ADMIN_ST, ADMU_NAME  ) %>%
+  summarise( n_distinct(uname) ) # Now there are 52 North Dakota allotments
+
 # Write as table.  
 # Join with allotment shapes on uname later for maps 
 # Join with summary stats by uname from google earth engine later 
