@@ -83,6 +83,9 @@ ecoregion_labels <-
     ecoregion_def %>% 
       distinct(Ecoregion) %>% arrange( Ecoregion)) 
 
+
+
+
 # "Ecogroup" is new field for lumping some ecoregions together and 
 # splitting some ecoregions I into sub regions for analysis 
 ecoregion_labels$ecogroup <- 

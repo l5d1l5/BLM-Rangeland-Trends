@@ -8,370 +8,143 @@ library(emmeans)
 library(GGally)
 source('code/analysis/plot_tools.R')
 
-con <- DBI::dbConnect(
-  RPostgres::Postgres(),
-  dbname = 'blm', 
-  user = 'andy', 
-  port = '5432'
-)
 
-allotments <- tbl(con, 'allotments') %>% 
-  select( uname, allot_name, admin_st, 
-          parent_cd, parent_name, admu_name, 
-          ecogroup, acres) %>% 
-  mutate( district_label = str_remove( parent_name, ' District.*$')) %>% 
-  mutate( 
-    office_label = str_remove_all(str_squish(str_trim (admu_name) ), 
-                                  pattern = c(' Field.*$'))) 
+model_fls <- dir('output', pattern = 'trend_model.rds' ,full.names =T )
+model_names <- str_extract(basename(model_fls), pattern = '[A-Za-z]+_[a-z]+')
 
+model_list <- data.frame( model_names = model_names , file = model_fls) %>% 
+  separate( model_names , c('type', 'unit')) %>%
+  mutate( type = str_to_upper(type )) %>% 
+  filter( type != 'HERB' , unit != 'agb')
 
-trend_files <- dir(path = 'output', pattern = 'cover_group_trends.csv', full.names = T)
-types <- str_extract(basename(trend_files), '[A-Z]+')
+format_ranefs <- function( x , type = 'AFG'){ 
+  
+  x$uname <- 
+    x$uname %>% 
+    mutate( Group = rownames(.) ) %>% 
+    mutate( scale = 'Allotment' , type = type )
+  
+  x$`year:climate_region` <- 
+    x$`year:climate_region` %>% 
+    mutate( Group = row.names(.)) %>%
+    mutate( scale = 'Year' , type = type )
+  
+  x$office_label <- 
+    x$office_label %>% 
+    mutate( Group = rownames(.) ) %>% 
+    mutate( scale = 'Office' , type = type )
+  
+  return(x)
+} 
 
-res <- lapply( trend_files, read_csv) 
-names(res) <- types 
-res <- mapply( x = res, y = types, function(x, y) data.frame(x, type = y), SIMPLIFY = F)
+out <- list()
+for( i in 1:nrow( model_list )){ 
+  
+  temp <- ranef( read_rds(file = model_list$file[i])) 
+  temp <- lapply( temp, as.data.frame ) 
+  temp <- format_ranefs(temp, model_list$type[i])
+  fixef_temp <- get_ecogroup_trends(read_rds(file = model_list$file[[i]]))
+  fixef_temp <- data.frame( Group = names( fixef_temp), 
+              scale = 'Ecogroup', 
+              type = model_list$type[i], year2 = fixef_temp  )
+  
+  temp <- do.call(bind_rows, temp )    
+  
+  temp <- 
+    temp %>% 
+    bind_rows(fixef_temp)
+  
+  out[[i ]] <- temp 
+  
+} 
+out_all <- do.call(bind_rows, out ) 
 
-all_res <- do.call(rbind, res )
+office_year2 <- out_all %>% 
+  pivot_longer(cols=c(`(Intercept)`, year2), names_to = 'param', values_to = 'value' ) %>% 
+  filter( scale == 'Office', param == 'year2') %>% 
+  pivot_wider(names_from = type, values_from = value )
 
-full_pairs_plot <- all_res %>% 
-  select( full_trend, uname, ecogroup, type ) %>% 
-  pivot_wider(names_from = type, values_from = full_trend) %>% 
-  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
+allotment_year2 <- out_all %>% 
+  pivot_longer(cols=c(`(Intercept)`, year2), names_to = 'param', values_to = 'value' ) %>% 
+  filter( scale == 'Allotment', param == 'year2') %>% 
+  pivot_wider(names_from = type, values_from = value )
 
-allotment_pairs_plot <- 
-  all_res %>% 
-  select( allot_trend, uname, ecogroup, type ) %>% 
-  pivot_wider(names_from = type, values_from = allot_trend) %>% 
-  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
+ecogroup_year2 <- out_all %>% 
+  pivot_longer(cols=c(`(Intercept)`, year2), names_to = 'param', values_to = 'value' ) %>% 
+  filter( scale == 'Ecogroup', param == 'year2') %>% 
+  pivot_wider(names_from = type, values_from = value )
 
-office_pairs_plot <- 
-  all_res %>% 
-  distinct( office_trend, office_label, ecogroup, type ) %>% 
-  pivot_wider(names_from = type, values_from = office_trend) %>% 
-  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
+year_intercept <- out_all %>% 
+  pivot_longer(cols=c(`(Intercept)`, year2), names_to = 'param', values_to = 'value' ) %>% 
+  filter( scale == 'Year', param == '(Intercept)') %>% 
+  pivot_wider(names_from = type, values_from = value )
 
-district_pairs_plot <- 
-  all_res %>% 
-  distinct( district_trend, district_label, ecogroup, type ) %>% 
-  pivot_wider(names_from = type, values_from = district_trend) %>%
-  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
+# Correlate Residuals across models 
+combos <- expand.grid( c('AFG', 'BG', 'PFG', 'SHR', 'TREE'), c('AFG', 'BG', 'PFG', 'SHR', 'TREE'))
+ecogroup_cor <- year_cor <- allotment_cor <- office_cor <- list(NA) 
+office_cor$scale <- "Office"
+allotment_cor$scale <- "Allotment"
+year_cor$scale <- "Year"
+ecogroup_cor$scale <- "Ecogroup"
 
-ecogroup_pairs_plot <- 
-  all_res %>% 
-  distinct( ecogroup_trend, ecogroup, type ) %>% 
-  pivot_wider(names_from = type, values_from = ecogroup_trend) %>%
-  ggpairs(columns = c('AFG', 'BG', 'PFG', 'SHR', 'TREE') )
+office_cor <- office_year2 %>% 
+  dplyr::select( AFG:TREE ) %>% 
+  cor(. , use = 'pairwise') %>% 
+  round( .  , 2)
 
-ggsave(plot = full_pairs_plot, 
-       filename = 'output/figures/full_trend_cover_pairsplot.png', 
-         width = 10, height = 7, dpi = 'print') 
+allotment_cor <- allotment_year2 %>% 
+  dplyr::select( AFG:TREE ) %>% 
+  cor(. , use = 'pairwise') %>% 
+  round( .  , 2)
 
-ggsave(plot = allotment_pairs_plot, 
-       filename = 'output/figures/allotment_trend_cover_pairsplot.png', 
-       width = 10, height = 7, dpi = 'print') 
+year_cor <- year_intercept %>% 
+  dplyr::select( AFG:TREE ) %>%
+  cor( . , use = 'pairwise') %>%
+  round( . , 2 )
 
-ggsave(plot = office_pairs_plot, 
-       filename = 'output/figures/office_trend_cover_pairsplot.png', 
-       width = 10, height = 7, dpi = 'print') 
+ecogroup_cor <- ecogroup_year2 %>% 
+  dplyr::select( AFG:TREE) %>% 
+  cor( . , use = 'pairwise') %>% 
+  round( . , 2 )
 
-ggsave(plot = district_pairs_plot, 
-       filename = 'output/figures/district_trend_cover_pairsplot.png', 
-       width = 10, height = 7, dpi = 'print') 
+write_lines(knitr::kable(year_cor),file = 'output/cover_year_cor.txt')
+write_lines(knitr::kable(ecogroup_cor),file = 'output/cover_ecogroup_trend_cor.txt')
+write_lines(knitr::kable(office_cor),file = 'output/cover_office_trend_cor.txt')
+write_lines(knitr::kable(allotment_cor),file = 'output/cover_allotment_trend_cor.txt')
 
-ggsave(plot = ecogroup_pairs_plot, 
-       filename = 'output/figures/ecogroup_trend_cover_pairsplot.png', 
-       width = 10, height = 7, dpi = 'print') 
+test <- year_intercept %>% 
+  separate( Group, into = c('year', 'region'), sep = ':') %>% 
+  group_by( region ) %>% 
+  do( cormat = list( cor( .[, c('AFG','BG', 'PFG', 'SHR', 'TREE')])))
 
-# 
-AFG_BG_correlations <- 
-  all_res %>% 
-  filter(type %in% c('AFG', 'BG')) %>% 
-  select(ecogroup, district_label, office_label, uname, type, allot_trend, 
-         office_trend, district_trend, ecogroup_trend, full_trend )
+test[ test$region == 'NR', ]$cormat 
+test[ test$region == 'NW', ]$cormat 
+test[ test$region == 'SW', ]$cormat 
+test[ test$region == 'W ', ]$cormat 
 
-scale_comparison <- 
-  AFG_BG_correlations %>% 
-  distinct(type, uname, allot_trend) %>%
-  pivot_wider(names_from = type, values_from = allot_trend ) %>% 
-  mutate( scale = 'Allotment') %>% 
-  rename( label = uname) %>% 
-  mutate( label = as.character(label)) %>% 
-  bind_rows(
-    AFG_BG_correlations %>% 
-      distinct(type, office_label, office_trend) %>%
-      pivot_wider(names_from = type, values_from = office_trend ) %>% 
-      mutate( scale = 'Field Office') %>%
-      rename( label = office_label)
-  ) %>% 
-  bind_rows(
-    AFG_BG_correlations %>% 
-      distinct(type, district_label, district_trend) %>%
-      pivot_wider(names_from = type, values_from = district_trend ) %>% 
-      mutate( scale = 'BLM District') %>% 
-      rename( label = district_label)
-  ) %>% 
-  bind_rows(
-    AFG_BG_correlations %>% 
-      distinct(type, ecogroup, ecogroup_trend) %>%
-      pivot_wider(names_from = type, values_from = ecogroup_trend ) %>% 
-      mutate( scale = 'Ecoregion') %>% 
-      rename( label = ecogroup)
-  ) %>% 
-  bind_rows(
-    AFG_BG_correlations %>% 
-      distinct(uname, full_trend, type ) %>%
-      pivot_wider(names_from = type, values_from = full_trend ) %>% 
-      mutate( scale = 'Total') %>% 
-      rename( label = uname) %>% 
-      mutate( label = as.character( label )) 
-  ) 
+bind_rows(
+  ecogroup_cor %>% data.frame( scale = 'Ecogroup' ), 
+  office_cor %>% data.frame( scale = 'Office' ), 
+  allotment_cor %>% data.frame( scale = 'Allotment' ), 
+  year_cor %>% data.frame( scale = 'Year' )) %>% 
+  mutate( type = str_extract(pattern = '[A-Z]+', row.names(.))) %>%
+  pivot_longer( cols = c(AFG:TREE), names_to = 'type2', values_to = 'r') %>% 
+  filter( type != type2) %>% 
+  mutate( scale = factor( scale, levels = c('Ecogroup', 'Office', 'Allotment', 'Year'), ordered = T)) %>%
+  ggplot( aes( x =type, y= r, fill = scale)) + 
+  geom_bar(position = position_dodge(), stat = 'identity') + 
+  facet_wrap( type2 ~.   ) +
+  scale_fill_manual( values = group_variance_colors[-1] )
 
-scale_rhos <- 
-  scale_comparison %>% 
-  filter( scale != 'Total') %>% 
-  group_by( scale ) %>% 
-  summarise( rho = list(cor.test(AFG, BG))) %>% 
-  rowwise() %>%
-  mutate( label  = paste0('r==', sprintf('%.2f', rho$estimate)))
+group_variance_colors
 
-scale_comparison %>% 
-  filter( scale != 'Total' )  %>% 
-  ggplot( aes( x = AFG, y = BG )  ) + 
-  geom_point() + 
-  stat_smooth(method = 'lm', se = F, size = 0.5) + 
-  geom_text( data = scale_rhos, 
-             aes( x = Inf, y = Inf, label = label), vjust = 2, hjust = 1, parse = T) +  
-  facet_wrap( ~ factor( scale, levels = c('Ecoregion', 'BLM District', 'Field Office', 'Allotment'), ordered = T), 
-              scale = 'free') + 
-  ylab( 'Bare Ground Cover Trend') + 
-  xlab( 'Annual Forb/Grass Cover Trend') + 
-  theme_bw() + 
-  ggsave( filename = 'output/figures/BG_AFG_trend_correlations.png', 
-          width = 5, height = 5, dpi = 'print')
-
-# PFG to BG comparison 
-PFG_BG_correlations <- 
-  all_res %>% 
-  filter(type %in% c('PFG', 'BG')) %>% 
-  select(ecogroup, district_label, office_label, uname, type, allot_trend, 
-         office_trend, district_trend, ecogroup_trend, full_trend )
-
-scale_comparison <- 
-  PFG_BG_correlations %>% 
-  distinct(type, uname, allot_trend) %>%
-  pivot_wider(names_from = type, values_from = allot_trend ) %>% 
-  mutate( scale = 'Allotment') %>% 
-  rename( label = uname) %>% 
-  mutate( label = as.character(label)) %>% 
-  bind_rows(
-    PFG_BG_correlations %>% 
-      distinct(type, office_label, office_trend) %>%
-      pivot_wider(names_from = type, values_from = office_trend ) %>% 
-      mutate( scale = 'Field Office') %>%
-      rename( label = office_label)
-  ) %>% 
-  bind_rows(
-    PFG_BG_correlations %>% 
-      distinct(type, district_label, district_trend) %>%
-      pivot_wider(names_from = type, values_from = district_trend ) %>% 
-      mutate( scale = 'BLM District') %>% 
-      rename( label = district_label)
-  ) %>% 
-  bind_rows(
-    PFG_BG_correlations %>% 
-      distinct(type, ecogroup, ecogroup_trend) %>%
-      pivot_wider(names_from = type, values_from = ecogroup_trend ) %>% 
-      mutate( scale = 'Ecoregion') %>% 
-      rename( label = ecogroup)
-  ) %>% 
-  bind_rows(
-    PFG_BG_correlations %>% 
-      distinct(uname, full_trend, type ) %>%
-      pivot_wider(names_from = type, values_from = full_trend ) %>% 
-      mutate( scale = 'Total') %>% 
-      rename( label = uname) %>% 
-      mutate( label = as.character( label )) 
-  ) 
-
-scale_rhos <- 
-  scale_comparison %>% 
-  filter( scale != 'Total') %>% 
-  group_by( scale ) %>% 
-  summarise( rho = list(cor.test(PFG, BG))) %>% 
-  rowwise() %>%
-  mutate( label  = paste0('r==', sprintf('%.2f', rho$estimate)))
-
-scale_comparison %>% 
-  filter( scale != 'Total' )  %>% 
-  ggplot( aes( x = PFG, y = BG )  ) + 
-  geom_point() + 
-  stat_smooth(method = 'lm', se = F, size = 0.5) + 
-  geom_text( data = scale_rhos, 
-             aes( x = Inf, y = Inf, label = label), vjust = 2, hjust = 1, parse = T) +  
-  facet_wrap( ~ factor( scale, levels = c('Ecoregion', 'BLM District', 'Field Office', 'Allotment'), ordered = T), 
-              scale = 'free') + 
-  ylab( 'Bare Ground Cover Trend') + 
-  xlab( 'Perennial Forb/Grass Cover Trend') + 
-  theme_bw() + 
-  ggsave( filename = 'output/figures/BG_PFG_trend_correlations.png', 
-          width = 5, height = 5, dpi = 'print')
-
-
-# AFG to PFG trend correlations 
-PFG_AFG_correlations <- 
-  all_res %>% 
-  filter(type %in% c('AFG', 'PFG')) %>% 
-  select(ecogroup, district_label, office_label, uname, type, 
-         allot_trend, office_trend, district_trend, ecogroup_trend, full_trend )
-
-scale_comparison <- 
-  PFG_AFG_correlations %>% 
-  distinct(type, uname, allot_trend) %>%
-  pivot_wider(names_from = type, values_from = allot_trend ) %>% 
-  mutate( scale = 'Allotment') %>% 
-  rename( label = uname) %>% 
-  mutate( label = as.character(label)) %>% 
-  bind_rows(
-    PFG_AFG_correlations %>% 
-      distinct(type, office_label, office_trend) %>%
-      pivot_wider(names_from = type, values_from = office_trend ) %>% 
-      mutate( scale = 'Field Office') %>%
-      rename( label = office_label)
-  ) %>% 
-  bind_rows(
-    PFG_AFG_correlations %>% 
-      distinct(type, district_label, district_trend) %>%
-      pivot_wider(names_from = type, values_from = district_trend ) %>% 
-      mutate( scale = 'BLM District') %>% 
-      rename( label = district_label)
-  ) %>% 
-  bind_rows(
-    PFG_AFG_correlations %>% 
-      distinct(type, ecogroup, ecogroup_trend) %>%
-      pivot_wider(names_from = type, values_from = ecogroup_trend ) %>% 
-      mutate( scale = 'Ecoregion') %>% 
-      rename( label = ecogroup)
-  ) %>% 
-  bind_rows(
-    PFG_AFG_correlations %>% 
-      distinct(uname, full_trend, type ) %>%
-      pivot_wider(names_from = type, values_from = full_trend ) %>% 
-      mutate( scale = 'Total') %>% 
-      rename( label = uname) %>% 
-      mutate( label = as.character( label )) 
-  ) 
-
-scale_rhos <- 
-  scale_comparison %>% 
-  filter( scale != 'Total') %>% 
-  group_by( scale ) %>% 
-  summarise( rho = list(cor.test(PFG, AFG))) %>% 
-  rowwise() %>%
-  mutate( label  = paste0('r==', sprintf('%.2f', rho$estimate)))
-
-scale_comparison %>% 
-  filter( scale != 'Total' )  %>% 
-  ggplot( aes( x = PFG, y = AFG )  ) + 
-  geom_point() + 
-  stat_smooth(method = 'lm', se = F, size = 0.5) + 
-  geom_text( data = scale_rhos, 
-             aes( x = Inf, y = Inf, label = label), vjust = 2, hjust = 1, parse = T) +  
-  facet_wrap( ~ factor( scale, levels = c('Ecoregion', 'BLM District', 'Field Office', 'Allotment'), ordered = T), 
-              scale = 'free') + 
-  ylab( 'Bare Ground Cover Trend') + 
-  xlab( 'Perennial Forb/Grass Cover Trend') + 
-  theme_bw() + 
-  ggsave( filename = 'output/figures/AFG_PFG_trend_correlations.png', 
-          width = 5, height = 5, dpi = 'print')
-
-
-# 
-bare_m <- read_rds('output/BG_cover_trend_model.rds')
-BG_trends<- read_csv( file = 'output/BG_cover_group_trends.csv' ) 
-AFGC_trends <- read_csv(file = 'output/AFG_cover_group_trends.csv')
-
-BG_trends %>% 
-  left_join(AFGC_trends %>% select( - ecogroup, -district_label, -office_label ), 
-            by = 'uname') %>% 
-  ggplot( aes( x = full_trend.y, y = full_trend.x )) + 
-  geom_point() + 
-  geom_smooth(method = 'lm', aes( group = district_label), se = F) + 
-  facet_wrap( ~ ecogroup ) 
-
-BG_trends %>%
-  select( uname, allot_trend, ecogroup ) %>% 
-  rename( BG_trend = allot_trend ) %>% 
-  left_join(
-    AFGC_trends %>% 
-      select( uname, allot_trend) %>% 
-      rename( AFGC_trend = allot_trend) 
-  ) %>% 
-  ggplot( aes( x = AFGC_trend, y = BG_trend )) + 
-  geom_point() + 
-  geom_smooth( method = 'lm', se = F) + 
-  facet_wrap( ~ ecogroup )
-
-BG_trends %>%
-  distinct( ecogroup_trend,  ecogroup ) %>% 
-  rename( BG_trend = ecogroup_trend ) %>% 
-  left_join(
-    AFGC_trends %>% 
-      distinct( ecogroup_trend, ecogroup) %>% 
-      rename( AFGC_trend = ecogroup_trend) 
-  ) %>% 
-  ggplot( aes( x = AFGC_trend, y = BG_trend )) + 
-  geom_point() + 
-  geom_smooth( method = 'lm', se = F)
-
-BG_trends %>%
-  distinct( office_trend, office_label, ecogroup ) %>% 
-  rename( BG_trend = office_trend ) %>% 
-  left_join(
-    AFGC_trends %>% 
-      distinct( office_trend, office_label, ecogroup) %>% 
-      rename( AFGC_trend = office_trend) 
-  ) %>% 
-  ggplot( aes( x = AFGC_trend, y = BG_trend )) + 
-  geom_point() + 
-  geom_smooth( method = 'lm', se = F) + 
-  facet_wrap( ~ ecogroup )
-
-
-BG_trends %>%
-  distinct( district_trend, district_label ) %>% 
-  rename( BG_trend = district_trend ) %>% 
-  left_join(
-    AFGC_trends %>% 
-      distinct( district_trend, district_label, ecogroup) %>% 
-      rename( AFGC_trend = district_trend) 
-  ) %>% 
-  ggplot( aes( x = AFGC_trend, y = BG_trend )) + 
-  geom_point() + 
-  geom_smooth( method = 'lm', se = F) + 
-  facet_wrap( ~ ecogroup )
-
-# 
-# first_ten_avg <- 
-#   tbl(con, 'annual_data') %>% 
-#   filter( year < 1995 ) %>% 
-#   group_by( uname, type) %>%
-#   summarise( avg = mean ( value ) ) %>% 
-#   pivot_wider(id_cols = uname, names_from = type, values_from = avg) %>% 
-#   left_join(allotments) %>% 
-#   collect()
-# 
-# first_ten_avg %>%
-#   left_join(AFGC_trends) %>% 
-#   ggplot( aes( x = BG, y = full_trend )) + 
-#   geom_point() + 
-#   geom_smooth(method = 'lm') + 
-#   facet_wrap( ~ ecogroup )
-# 
-# first_ten_avg %>%
-#   left_join(AFGC_trends) %>% 
-#   ggplot( aes( x = PFGC, y = full_trend )) + 
-#   geom_point() + 
-#   geom_smooth(method = 'lm') + 
-#   facet_wrap( ~ ecogroup )
-
+bind_rows( 
+  ecogroup_cor[1, ], 
+  office_cor[1, ], 
+  allotment_cor[1, ], 
+  year_cor[1, ]) %>% 
+  mutate( scale = c('ecogroup', 'office', 'allotment', 'year')) %>% 
+  mutate( scale = factor( scale, levels = c('ecogroup', 'office', 'allotment', 'year'), ordered = T)) %>%
+  pivot_longer( BG:TREE) %>% 
+  ggplot(aes( x = name, y = value, fill = scale)) +
+  geom_bar(stat = 'identity', position = position_dodge())

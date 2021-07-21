@@ -15,14 +15,30 @@ con <- DBI::dbConnect(
   port = '5432'
 )
 
-# if exists must remove other allotment tables 
-# dbRemoveTable(con, 'annual_data')
-# dbRemoveTable(con, 'annual_burns')
-# dbRemoveTable(con, 'annual_climate')
-# dbRemoveTable(con, 'elevation')
-# dbRemoveTable(con, 'npp_16')
-# dbRemoveTable(con, 'ecogroup')
-# dbRemoveTable(con, 'allotments')
+climate_regions <- list(
+  NW = c('OR', 'WA', 'ID'), 
+  NR = c('MT', 'WY'), 
+  SW = c('UT', 'CO', 'NM', 'AZ'), 
+  W = c('CA', 'NV') )
+
+climate_regions <- stack(climate_regions ) %>% 
+  rename( 'climate_region' = ind, 'admin_st' = values  )
+
+# Must remove old tables before adding 
+
+cur_tables <- dbListTables(con)
+cur_tables <- cur_tables[ -which( cur_tables %in% c('geography_columns', 'geometry_columns', 'spatial_ref_sys')) ] 
+if( length(cur_tables) > 0 ) { 
+  lapply( cur_tables[ - which( cur_tables == 'allotments' )], dbRemoveTable, conn = con )
+  dbRemoveTable(con, 'allotments') # remove allotments last
+
+  # dbRemoveTable(con, 'annual_data')
+  # dbRemoveTable(con, 'annual_climate')
+  # dbRemoveTable(con, 'elevation')
+  # dbRemoveTable(con, 'npp_16')
+  # dbRemoveTable(con, 'ecogroup')
+  # dbRemoveTable(con, 'allotments')
+}
 
 allotment_info <- 
   readRDS(file = 'data/temp/allotment_info.rds') %>% 
@@ -33,7 +49,9 @@ allotment_info <- allotment_info %>%
                            last_date, area, acres, 
                            adm_unit_cd, admin_st, admu_name,
                            parent_cd, parent_name, lon, lat) %>% 
-  mutate( acres = as.numeric(acres), area = as.numeric(area))
+  mutate( acres = as.numeric(acres), area = as.numeric(area)) %>% 
+  left_join( climate_regions)
+
 
 create_table_query <-
   str_squish( str_remove_all("
@@ -45,6 +63,7 @@ create_table_query <-
                              acres NUMERIC, 
                              adm_unit_cd CHAR(8), 
                              admin_st CHAR(2), 
+                             climate_region CHAR(2),
                              admu_name VARCHAR, 
                              parent_cd CHAR(8), 
                              parent_name VARCHAR, 

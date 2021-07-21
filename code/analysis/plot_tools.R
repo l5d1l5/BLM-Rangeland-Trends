@@ -5,6 +5,9 @@ require( tidyverse)
 my_colors0 <- c('sienna1', 'black','8dd3c7','#fb8072','#80b1d3', 'magenta' )
 names(my_colors0) <- c("Annual", "Bare", "Perennial", "Shrub", "Tree", "Litter")
 
+# lbs /acre to kg/ha
+kgHa <- 1.12085
+
 my_colors <- c( 'Annual' = '#b2df8a', 
                 'Bare'  = 'darkgray',
                 'Perennial' = '#1f78b4', 
@@ -20,9 +23,46 @@ names( ecogroup_colors  ) <- c(
   'E Cold Deserts', 
   'Great Plains', 
   'Mediterranean California', 
-  'NW Forested Mts', 
+  'Forested Mts', 
   'AZ/NM Highlands', 
   'Warm Deserts')
+
+# For relabeling figures with shorter labels 
+ecogroup_labels = c('AZ/NM\nHighlands', 
+                    'E Cold Deserts', 
+                    'Great Plains', 
+                    'Mediterranean\nCalifornia', 
+                    'Forested Mts', 
+                    'W Cold Deserts',
+                    'Warm Deserts')
+
+group_variance_colors <- c('#f1b6da','cornsilk4','#b8e186','#4dac26','cadetblue3')
+names(group_variance_colors) <- c('District', 'Field Office', 'Allotment', 'Year', 'Residual')
+
+
+# GLMER/LMER options 
+control_glmer = glmerControl(optimizer = "optimx", 
+                             calc.derivs = FALSE,
+                             optCtrl = list(method = "nlminb", 
+                                            starttests = FALSE, 
+                                            kkt = FALSE, 
+                                            maxit = 10000))
+
+control_lmer = lmerControl(optimizer = "optimx", 
+                           calc.derivs = FALSE,
+                           optCtrl = list(method = "nlminb", 
+                                          starttests = FALSE, 
+                                          kkt = FALSE))
+
+my_control =
+  lmerControl(
+    optimizer = 'optimx',
+    optCtrl = list(
+      method = 'nlminb',
+      eval.max = 1e3,
+      iter.max = 1e3
+    )
+  )
 
 
 decade_function <- function(x ) { 
@@ -97,7 +137,44 @@ plot_ecogroup_trend_coefficients <- function( trend_summary, my_colors ){
   
 }
 
+plot_trend_coefficients <- function(beta_table, my_colors) { 
+  # beta_table = table of trend coefficients for each ecogroup 
+  beta_table %>% 
+    ggplot( aes( x = type, 
+                 y = year2.trend, 
+                 ymin = asymp.LCL, 
+                 ymax = asymp.UCL, 
+                 color = type )) + 
+    geom_point() + 
+    geom_errorbar() + 
+    geom_hline(aes(yintercept = 0 ), linetype = 2) + 
+    facet_grid( ~ ecogroup ) + 
+    scale_color_manual(name = 'Functional Type', 
+                       values = my_colors) + 
+    scale_y_continuous(name = 'Annual Rate') + 
+    theme_bw() +   
+    theme(axis.text.x = element_blank(),
+          axis.title.x = element_blank(), 
+          axis.ticks.x = element_blank())
+}
 
+plot_trend_coefficients_vertical <- function(my_trend_table, my_colors ) { 
+  
+  my_trend_table %>%   
+    ggplot(aes( x = year2.trend, y = type, color = type  )) + 
+    geom_point() + 
+    geom_errorbar(aes( xmin = asymp.LCL, xmax = asymp.UCL)) + 
+    geom_vline( aes( xintercept = 0 ), linetype = 2, alpha = 0.5) + 
+    facet_grid( ecogroup ~ . , switch = 'y') + 
+    scale_x_continuous(name = 'Trend Coefficient') + 
+    scale_color_manual(values = my_colors , guide = guide_legend(reverse = T)) + 
+    theme_bw() + 
+    theme(axis.text.y = element_blank(), 
+          axis.title.y = element_blank(), 
+          axis.ticks.y = element_blank(), 
+          strip.text.y.left = element_text( angle = 0), 
+          legend.title = element_blank())
+}
 
 # Functions for summarizing trends at the Ecogroup and BLM Admin Level
 get_ecogroup_trends <- function( model ){ 
@@ -135,7 +212,9 @@ get_blm_random_effects <- function( model ) {
 
 blm_trend_summary <- function( my_data, ecogroup_trends, group_trends ){ 
   
-  if( all( c('allot_effects', 'dist_effects', 'office_effects') %in% names(group_trends)) ){ 
+  if( all( !is.null( nrow( group_trends$allot_effects )), 
+           !is.null( nrow( group_trends$office_effects)), 
+           !is.null( nrow( group_trends$dist_effects))) ){ 
     my_data %>% 
       distinct(ecogroup, district_label, office_label, uname) %>%
       mutate( ecogroup_trend = ecogroup_trends[ecogroup]) %>%
@@ -147,7 +226,19 @@ blm_trend_summary <- function( my_data, ecogroup_trends, group_trends ){
       rowwise() %>% 
       mutate( full_trend = ecogroup_trend + district_trend + 
                 office_trend + allot_trend )
-  }else{ 
+  }else if( all( !is.null( nrow( group_trends$allot_effects )), 
+                 !is.null( nrow( group_trends$office_effects)))){ 
+    my_data %>% 
+      distinct(ecogroup, office_label, uname) %>%
+      mutate( ecogroup_trend = ecogroup_trends[ecogroup]) %>%
+      left_join( group_trends$office_effects, by = 'office_label') %>% 
+      left_join( group_trends$allot_effects, by = 'uname') %>%
+      dplyr::select( uname, ecogroup, office_label, 
+                     ecogroup_trend, office_trend, allot_trend ) %>%
+      rowwise() %>% 
+      mutate( full_trend = ecogroup_trend + office_trend + allot_trend )
+  }else if( all( !is.null( nrow( group_trends$district_effects )), 
+                 !is.null( nrow( group_trends$office_effects)))){
     my_data %>% 
       distinct(ecogroup, district_label, office_label) %>%
       mutate( ecogroup_trend = ecogroup_trends[ecogroup]) %>%
@@ -159,5 +250,127 @@ blm_trend_summary <- function( my_data, ecogroup_trends, group_trends ){
       mutate( full_trend = ecogroup_trend + district_trend + office_trend )
   }
   
+}
+
+back_trans_frames <- function(m, type = "NAME"){ 
+  dat <- m@frame
+  dat$value <- back_transform( dat$value2, attributes_obj = attributes(dat$value2))
+  dat$year <- back_transform( dat$year2, 
+                              attributes_obj = c(attributes(dat$year2), 'scaled:scale' = 1), log = F)
+  dat$type <- type 
+  return( dat )   
+}
+
+
+
+scale_comparison_df <- function( x ) { 
   
+  x %>% 
+    distinct(type, uname, allot_trend) %>%
+    pivot_wider(names_from = type, values_from = allot_trend ) %>% 
+    mutate( scale = 'Allotment') %>% 
+    rename( label = uname) %>% 
+    mutate( label = as.character(label)) %>% 
+    bind_rows(
+      x %>% 
+        distinct(type, office_label, office_trend) %>%
+        pivot_wider(names_from = type, values_from = office_trend ) %>% 
+        mutate( scale = 'Field Office') %>%
+        rename( label = office_label)
+    ) %>% 
+    bind_rows(
+      x %>% 
+        distinct(type, ecogroup, ecogroup_trend) %>%
+        pivot_wider(names_from = type, values_from = ecogroup_trend ) %>% 
+        mutate( scale = 'Ecoregion') %>% 
+        rename( label = ecogroup)
+    ) %>% 
+    bind_rows(
+      x %>% 
+        distinct(uname, full_trend, type ) %>%
+        pivot_wider(names_from = type, values_from = full_trend ) %>% 
+        mutate( scale = 'Total') %>% 
+        rename( label = uname) %>% 
+        mutate( label = as.character( label )) 
+    ) 
+  
+}
+
+get_rhos <- function( x, vars = c('AFGC', 'PFGC') ) { 
+  
+  x %>% filter( scale != 'Total') %>% 
+    group_by( scale ) %>% 
+    summarise( rho = list(cor.test( eval(parse( text = vars[1])), 
+                                    eval(parse( text = vars[2]))))) %>% 
+    rowwise() %>%
+    mutate( label  = paste0('r==', sprintf('%.2f', rho$estimate)))
+  
+}
+
+make_corplot_by_scale <- function( x, types = c('AFG', 'BG') ){ 
+  
+  correlations <- 
+    x %>% 
+    filter(type %in% types) %>% 
+    select(ecogroup, office_label, uname, type, allot_trend, 
+           office_trend, ecogroup_trend, full_trend )
+  
+  scale_comparison <- scale_comparison_df(correlations)
+  scale_rhos <- get_rhos(scale_comparison, vars = types)
+  
+  return( 
+    scale_comparison %>% 
+      filter( scale != 'Total' )  %>% 
+      ggplot( aes_string( x = types[1], y = types[2])  ) + 
+      geom_point() + 
+      stat_smooth(method = 'lm', se = F, size = 0.5) + 
+      geom_text( data = scale_rhos, 
+                 aes( x = Inf, y = Inf, label = label), vjust = 2, hjust = 1.1, parse = T) +  
+      facet_wrap( ~ factor( scale, levels = c('Ecoregion', 'Field Office', 'Allotment'), ordered = T), 
+                  scale = 'free') +
+      theme_bw() 
+  )
+}
+
+
+ecogroup_detail_plot <- function( x, 
+                                  sel_type = 'Bare', 
+                                  sel_ecogroup = 'Warm Deserts', 
+                                  my_colors = 'black'){ 
+  
+  
+  title <- paste0(  paste( sel_type, sep = '&' ), 'Cover: ', 
+                   paste( sel_ecogroup))   
+  
+  
+  if(length(sel_type) > 1 ){   
+    
+  gg_out <- x %>% 
+      filter( type %in% sel_type, 
+              ecogroup == sel_ecogroup ) %>% 
+      ggplot( aes( x = year, y = value, color = type )) + 
+      geom_line(size = 0.2, alpha = 0.5, aes( group = paste(uname, type))) + 
+      scale_y_log10(name = 'Cover (%)') + 
+      scale_x_continuous(breaks = c(1995, 2005, 2015)) + 
+      scale_color_manual(values = my_colors) + 
+      ggtitle(title) + 
+      theme_bw() 
+    
+  }else if( length(sel_type) == 1 ){
+  gg_out <- x %>% 
+      filter( type == sel_type, ecogroup == sel_ecogroup ) %>% 
+      ggplot( aes( x = year, y = value, group = uname)) + 
+      geom_line(size = 0.2, alpha = 0.5) + 
+      scale_y_log10(name = 'Cover (%)') + 
+      scale_x_continuous(breaks = c(1995, 2005, 2015)) + 
+      ggtitle(title) + 
+      theme_bw()
+  }
+  if( n_distinct( gg_out$data$district_label) > 2 ){
+    gg_out <- 
+      gg_out + 
+      facet_wrap( ~ district_label)
+  }
+  
+  return( gg_out )
 }

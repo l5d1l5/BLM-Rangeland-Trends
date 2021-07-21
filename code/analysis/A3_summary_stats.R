@@ -13,35 +13,86 @@ con <- DBI::dbConnect(
 )
 
 allotment_info <- tbl( con, 'allotments')
+dbListTables(con)
 
-allotment_info <- 
-  allotment_info %>% 
-  mutate( district_label = str_remove( parent_name, ' District.*$')) %>% 
-  mutate( 
-    office_label = str_remove_all(str_squish(str_trim ( str_to_title(admu_name))), 
-                                  pattern = ' Field.*$')
-  ) %>% 
-  mutate( er1label = str_squish(
-    str_trim(
-      str_remove_all(
-        str_to_title(na_l1name), '[\\?\\*\\(\\)]')
-    )
-  )
-  ) %>% 
-  mutate( er2label = str_squish(
-    str_trim(
-      str_remove_all(
-        str_to_title(na_l2name), '[\\?\\*\\(\\)]')
-    )
-  )
-  ) %>% 
-  mutate( er3label = str_squish(
-    str_trim(
-      str_remove_all(
-        str_to_title(na_l3name), '[\\?\\*\\(\\)]')
-    )
-  )
-  ) 
+annual_data <- tbl(con, 'annual_data') %>% 
+  pivot_wider(id_cols = c(uname, year),names_from =  type,values_from =  value) 
+
+ecogroup_averages <- tbl(con, 'annual_climate')  %>% 
+  left_join( annual_data )  %>% 
+  left_join(allotment_info) %>% 
+  left_join(tbl(con, 'elevation')) %>% 
+  filter( year >= 1991, year <= 2019, ecogroup != 'Coastal Forests')  %>% 
+  group_by( ecogroup ) %>% 
+  summarise_at(.vars = c('pr', 'tavg', 
+                         'herbaceousAGB', 
+                         'TREE', 
+                         'AFGC', 'PFGC', 
+                         'BG', 'area', 
+                         'elevation'), .funs = c('mean') )
+  
+
+ecogroup_totals <- annual_data  %>% 
+  left_join(allotment_info) %>% 
+  filter( year >= 1991, year <= 2019, ecogroup != 'Coastal Forests')  %>% 
+  group_by( ecogroup, uname ) %>% 
+  distinct(ecogroup, uname ) %>% 
+  left_join(allotment_info) %>% 
+  group_by( ecogroup ) %>% 
+  summarise( area = sum(area), 
+             allotments = n_distinct(uname), 
+             districts = n_distinct(parent_name), 
+             field_offices = n_distinct(admu_name)) %>% 
+  select( ecogroup, districts, field_offices, allotments, area ) %>% 
+  mutate( area_Million_hectare = (area/10e3)/1e6 ) %>%
+  select( - area )
+
+# For Table 1 in the Text 
+allotment_summary <- ecogroup_totals %>% 
+  left_join(ecogroup_averages, by = 'ecogroup') %>% 
+  select( ecogroup, districts, field_offices, allotments, area_Million_hectare, pr, tavg, elevation) %>% 
+  collect() 
+
+
+
+allotment_summary %>% write_csv('output/allotment_summary_table.csv')
+
+unique_groups <- annual_data  %>% 
+  left_join(allotment_info) %>% 
+  filter( year >= 1991, year <= 2019, ecogroup != 'Coastal Forests')  %>% 
+  distinct(ecogroup, parent_name, admu_name, uname, area )  %>% 
+  ungroup() %>%
+  summarise( n_distinct(ecogroup), 
+             n_distinct(parent_name), n_distinct(admu_name), 
+             n_distinct(uname), sum(area))
+
+# using the data in the models only 
+test1 <- read_rds('output/AFG_cover_trend_model.rds')
+test2 <- read_rds('output/PFG_cover_trend_model.rds')
+test3 <- read_rds('output/pfg_agb_trend_model.rds')
+test4 <- read_rds('output/afg_agb_trend_model.rds')
+test <- rbind(test1@frame, test2@frame, test3@frame, test4@frame )
+
+test %>%
+  dplyr::select( ecogroup , office_label, district_label, uname) %>%
+  group_by( ecogroup ) %>%
+  summarise( noffices = n_distinct(office_label), 
+             ndistricts = n_distinct(district_label), 
+             nallotments = n_distinct(uname))
+
+
+test %>%
+  dplyr::select( ecogroup, office_label, district_label, uname) %>%
+  summarise( necogroup = n_distinct(ecogroup), 
+             noffices = n_distinct(office_label), 
+             ndistricts = n_distinct(district_label), 
+             nallotments = n_distinct(uname))
+
+tbl(con,)
+allotment_info %>% 
+  group_by( ecogroup ) %>% 
+
+  summarise( )
 
 allotment_summary <- 
   allotment_info %>% 

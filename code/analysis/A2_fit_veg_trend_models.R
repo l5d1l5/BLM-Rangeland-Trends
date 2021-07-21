@@ -129,10 +129,7 @@ saveRDS(m_afg_agb, file = 'output/afg_agb_trend_model.rds')
 
 m_herb_agb <- lmer(data = herb_agb, 
                    basic_form, 
-                   control = lmerControl(optimizer = 'optimx', 
-                                         optCtrl = list( method = 'nlminb', 
-                                                         eval.max = 1e3, 
-                                                         iter.max = 1e3)))
+                   control = control_lmer)
 
 saveRDS(m_herb_agb, file = 'output/herb_agb_trend_model.rds')
 
