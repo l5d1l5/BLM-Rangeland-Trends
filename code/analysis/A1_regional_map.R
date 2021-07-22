@@ -109,8 +109,8 @@ regional_map <-
   theme( legend.position = c(0.85, 0.25), 
          legend.box.background = element_rect(color = 1, size = 0.2)) 
 
-regional_map
+
 
 regional_map + 
-  ggsave( filename = 'output/figures/Fig_1_Region_Map.png',
+  ggsave( filename = 'output/figures/Fig_1_Ecoregion_Map.png',
           width = 8, height = 7, units = 'in', dpi = 600)
