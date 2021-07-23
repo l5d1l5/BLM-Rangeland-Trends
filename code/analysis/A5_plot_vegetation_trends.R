@@ -4,8 +4,10 @@ library(lme4)
 library(emmeans)
 library(gridExtra )
 library(ggpubr)
+require(kableExtra)
 
-source('code/analysis/plot_tools.R')
+source('code/analysis/functions.R')
+source('code/analysis/parameters.R')
 
 # cover trends:  ------------------------------------------ # 
 cover_model_files <- dir(path = 'output', pattern = '.*_cover_trend_model.rds', full.names = T)
@@ -57,7 +59,7 @@ trend_table_cover$unit <- 'Cover'
 # Biomass Models and Trends--------------------------- # 
 agb_model_files <- dir(path = 'output', pattern = '.*_agb_trend_model.rds', full.names = T)
 agb_models <- lapply(agb_model_files, read_rds)
-types  <- c( str_extract( basename( agb_model_files), pattern = '[a-z]+') )
+types  <- c( str_extract( basename( agb_model_files), pattern = '[A-Z]+') )
 types <- factor(types, labels = c('Annual', 'Total', 'Perennial'))
 trend_table <- mapply( x = agb_models, y = types, FUN = function(x,y) ecogroup_trends_as_df(x, y), SIMPLIFY = F)
 trend_table <- do.call(rbind, trend_table)
@@ -82,7 +84,6 @@ trend_table_agb <- trend_table %>%
           asymp.UCL = asymp.UCL*scale/year2_scale)   %>% 
   mutate( ecogroup = factor( ecogroup, labels = ecogroup_labels)) 
 
-
 trend_table_agb$unit <- 'Biomass'
 
 # Plot Cover and Biomass Trends together 
@@ -94,7 +95,6 @@ trend_table <-
   mutate( type = factor(type, levels = sort(names(my_colors), decreasing = T), ordered = T)) %>% 
   mutate( sig = ifelse( (asymp.LCL > 0 | asymp.UCL < 0), "*", '' )) 
 
-
 # Plot ------------------------- 
 trend_table %>%
   plot_trend_coefficients_vertical(my_colors = my_colors ) + 
@@ -102,21 +102,21 @@ trend_table %>%
   theme( legend.title = element_text()) + 
   scale_color_manual(name = 'Functional Type', values = my_colors) + 
   scale_x_continuous(name = 'Trend Slope (+/- 95%CI)') + 
-  ggsave(filename = 'output/figures/Fig_3_veg_trends_by_Ecoregion.png', 
+  ggsave(filename = 'output/figures/Fig_4_veg_trends_by_Ecoregion.png', 
          height = 8, width = 8, units = 'in', dpi = 'print') 
 
 
-trend_table_cover %>% 
-  mutate( type = factor(type, levels =c('Tree', 'Shrub', 'Perennial', 'Bare', 'Annual'), ordered = T)) %>%
-  bind_rows( (trend_table %>% mutate(unit = as.character(unit)))) %>% 
-  filter( type != 'Total') %>% 
-  mutate( unit = factor( unit, levels = c('Cover', 'Biomass'), ordered = T)) %>%
-  plot_trend_coefficients(my_colors = my_colors ) + 
-  facet_grid( unit ~ ecogroup, scales = 'free_y' ) + 
-  scale_y_continuous(name = 'Trend Slope') + 
-  ggsave(filename = 'output/figures/Fig_3_HORIZONTAL_veg_trends_by_Ecoregion.png', 
-       height = 5, width = 9, units = 'in', dpi = 'print') 
-
+# trend_table_cover %>% 
+#   mutate( type = factor(type, levels =c('Tree', 'Shrub', 'Perennial', 'Bare', 'Annual'), ordered = T)) %>%
+#   bind_rows( (trend_table %>% mutate(unit = as.character(unit)))) %>% 
+#   filter( type != 'Total') %>% 
+#   mutate( unit = factor( unit, levels = c('Cover', 'Biomass'), ordered = T)) %>%
+#   plot_trend_coefficients(my_colors = my_colors ) + 
+#   facet_grid( unit ~ ecogroup, scales = 'free_y' ) + 
+#   scale_y_continuous(name = 'Trend Slope') + 
+#   ggsave(filename = 'output/figures/Fig_3_HORIZONTAL_veg_trends_by_Ecoregion.png', 
+#        height = 5, width = 9, units = 'in', dpi = 'print') 
+# 
 
 #  Save Tables -------------------------------------------- # 
 ttlist <- trend_table %>%
@@ -126,12 +126,51 @@ ttlist <- ttlist[ which( unlist( lapply(ttlist, nrow ) ) != 0  ) ]
 
 for( i in names(ttlist)){ 
   
-  ttlist[[i]] %>% kbl(digits = 3, caption = i ) %>% kable_classic_2() %>% 
-    save_kable(file = file.path('output/tables/', 
+  ttlist[[i]] %>% kableExtra::kbl(digits = 3, caption = i ) %>% kableExtra::kable_classic_2() %>% 
+    kableExtra::save_kable(file = file.path('output/tables/', 
                                 paste0( i, '_trend_estimates.html')))
 } 
 
 # Plot observed and predicted over time 
+## Plot Allotment Cover over time : 
+dat <- mapply( x = cover_models, 
+               y = c('Annual', 'Bare', 'Perennial', 'Shrub', 'Tree'), 
+               FUN = function(x, y) back_trans_frames(x, y), 
+               SIMPLIFY = F)
+
+dat <- mapply( x = dat, y = cover_models, FUN = function( x, y ) { 
+  x$yhat <- back_transform( predict( y, newdata = x, re.form = ~ (1|office_label)), attributes(y@frame$value2) )
+  return(x)
+}, SIMPLIFY = F)
+
+dat <- do.call(rbind, dat)
+
+dat2 <- dat %>% 
+  mutate(Class = ifelse(type %in% c('Tree', 'Shrub'), 'Woody', 'Herbaceous')) %>% 
+  mutate( ecogroup = factor(ecogroup, labels = c(ecogroup_labels)))
+
+cover_plot <- dat2 %>% 
+  ggplot(aes( x = year, y = value, color = type, fill = type , group = type )) + 
+  stat_summary(fun.max = function(x) quantile(x, 0.75),
+               fun.min = function(x) quantile(x, 0.25), 
+               geom = 'ribbon', alpha = 0.4, color = NA) + 
+  stat_summary(fun = function( x ) median(x), geom = 'line') + 
+  facet_grid( ecogroup ~ Class) + 
+  scale_color_manual(name = 'Vegetation Type', values = my_colors) + 
+  scale_fill_manual(name = 'Vegetation Type', values = my_colors) + 
+  theme_bw() + 
+  scale_x_continuous(breaks = c(1995, 2005, 2015)) + 
+  scale_y_continuous(limits = c(0,NA)) + 
+  theme(strip.text.y = element_text(angle = 0)) + 
+  ylab( 'Cover (%)')   + 
+  xlab( 'Year')
+
+# cover_plot %>% 
+#   ggsave(filename = 'output/figures/Fig_2b_average_cover_over_time.png', 
+#          dpi = 'print', height = 8, width = 7, units = 'in')
+# 
+
+# Plot AGB over time 
 agb_types <- c('Annual Biomass', 'Herb Biomass', 'Perennial Biomass')
 dat <- mapply( x = agb_models, 
                y = agb_types, 
@@ -174,15 +213,15 @@ agb_biomass_plot <-
   agb_biomass_plot %+% 
   ( agb_biomass_plot$data %>% filter( type != 'Total'))  
 
-agb_biomass_plot %>% 
-  ggsave(filename = 'output/figures/Fig_2a_average_agb_over_time.png', 
-  dpi = 'print', height = 8, width = 6, units = 'in')
+# agb_biomass_plot %>% 
+#   ggsave(filename = 'output/figures/Fig_2a_average_agb_over_time.png', 
+#   dpi = 'print', height = 8, width = 6, units = 'in')
 
-agb_biomass_plot + 
-  facet_grid(. ~ ecogroup  ) + 
-  theme(axis.text.x  = element_text(angle = -45, hjust = 0 )) + 
-  ggsave(filename = 'output/figures/AGB_over_time_HORIZONTAL_no_trend.png',
-       dpi = 'print', height = 4, width = 10, units = 'in')
+# agb_biomass_plot + 
+#   facet_grid(. ~ ecogroup  ) + 
+#   theme(axis.text.x  = element_text(angle = -45, hjust = 0 )) + 
+#   ggsave(filename = 'output/figures/AGB_over_time_HORIZONTAL_no_trend.png',
+#        dpi = 'print', height = 4, width = 10, units = 'in')
 
 agb_biomass_plot_no_lines <- agb_biomass_plot 
 agb_biomass_plot_no_lines$layers[[2]] <- NULL
@@ -191,69 +230,33 @@ preds <- agb_biomass_plot$data %>%
   dplyr::select( year, type, ecogroup, office_label , yhat_kg_ha) %>% 
   distinct() 
 
-preds %>% 
-  ggplot( aes( x= year, y = yhat_kg_ha, group = office_label, color = type )) +
-  geom_line() + 
-  facet_grid( type ~ ecogroup )
+# preds %>% 
+#   ggplot( aes( x= year, y = yhat_kg_ha, group = office_label, color = type )) +
+#   geom_line() + 
+#   facet_grid( type ~ ecogroup )
 
-agb_biomass_plot_no_lines + 
-  stat_summary(aes( y = yhat_kg_ha) ,
-               fun = function(x) median(x),
-               geom = 'line', linetype = 2, size = 0.5) +
-    facet_grid(. ~ ecogroup  ) + 
-    theme(axis.text.x  = element_text(angle = -45, hjust = 0 )) + 
-  ggsave(filename = 'output/figures/AGB_over_time_HORIZONTAL_with_trend.png',
-       dpi = 'print', height = 4, width = 10, units = 'in')
+# agb_biomass_plot_no_lines + 
+#   stat_summary(aes( y = yhat_kg_ha) ,
+#                fun = function(x) median(x),
+#                geom = 'line', linetype = 2, size = 0.5) +
+#     facet_grid(. ~ ecogroup  ) + 
+#     theme(axis.text.x  = element_text(angle = -45, hjust = 0 )) + 
+#   ggsave(filename = 'output/figures/AGB_over_time_HORIZONTAL_with_trend.png',
+#        dpi = 'print', height = 4, width = 10, units = 'in')
 
-## Plot Allotment Cover over time : 
-dat <- mapply( x = cover_models, 
-               y = c('Annual', 'Bare', 'Perennial', 'Shrub', 'Tree'), 
-               FUN = function(x, y) back_trans_frames(x, y), 
-               SIMPLIFY = F)
-
-dat <- mapply( x = dat, y = cover_models, FUN = function( x, y ) { 
-    x$yhat <- back_transform( predict( y, newdata = x, re.form = ~ (1|office_label)), attributes(y@frame$value2) )
-    return(x)
-  }, SIMPLIFY = F)
-
-dat <- do.call(rbind, dat)
-
-dat2 <- dat %>% 
-  mutate(Class = ifelse(type %in% c('Tree', 'Shrub'), 'Woody', 'Herbaceous')) %>% 
-  mutate( ecogroup = factor(ecogroup, labels = c(ecogroup_labels)))
-
-cover_plot <- dat2 %>% 
-  ggplot(aes( x = year, y = value, color = type, fill = type , group = type )) + 
-  stat_summary(fun.max = function(x) quantile(x, 0.75),
-               fun.min = function(x) quantile(x, 0.25), 
-               geom = 'ribbon', alpha = 0.4, color = NA) + 
-  stat_summary(fun = function( x ) median(x), geom = 'line') + 
-  facet_grid( ecogroup ~ Class) + 
-  scale_color_manual(name = 'Vegetation Type', values = my_colors) + 
-  scale_fill_manual(name = 'Vegetation Type', values = my_colors) + 
-  theme_bw() + 
-  scale_x_continuous(breaks = c(1995, 2005, 2015)) + 
-  scale_y_continuous(limits = c(0,NA)) + 
-  theme(strip.text.y = element_text(angle = 0)) + 
-  ylab( 'Cover (%)')   + 
-  xlab( 'Year')
-
-cover_plot %>% 
-  ggsave(filename = 'output/figures/Fig_2b_average_cover_over_time.png', 
-         dpi = 'print', height = 8, width = 7, units = 'in')
 
 # Make Horizontal plot for presentation 
-cover_plot + 
-  facet_grid( Class ~ ecogroup, scales = 'free_y') + 
-  theme( axis.text.x = element_text(angle = -45, hjust = 0)) + 
-  ggsave(filename = 'output/figures/cover_over_time_HORIZONTAL_no_fitted_lines.png', 
-         dpi = 'print', height = 6, width = 10, units = 'in')
+# cover_plot + 
+#   facet_grid( Class ~ ecogroup, scales = 'free_y') + 
+#   theme( axis.text.x = element_text(angle = -45, hjust = 0)) + 
+#   ggsave(filename = 'output/figures/cover_over_time_HORIZONTAL_no_fitted_lines.png', 
+#          dpi = 'print', height = 6, width = 10, units = 'in')
 
 cover_plot  + 
   facet_grid( type ~ ecogroup , scales = 'free_y') + 
   scale_y_log10() + 
   theme( axis.text.x = element_text( angle = -45, hjust = 0)) + 
-  ggsave('output/figures/cover_series_detail.png', 
+  ggsave('output/figures/Fig_2_cover_series_by_ecoregion.png', 
          height = 7, width = 10, units = 'in', dpi = 'print')
 
 pred_df <- 
@@ -261,18 +264,18 @@ pred_df <-
   group_by(type, year, ecogroup ) %>% 
   dplyr::summarise(yhat = median(yhat))
 
-cover_plot  + 
-  facet_grid( type ~ ecogroup , scales = 'free_y') + 
-  geom_line(data = pred_df, aes( y = yhat )) + 
-  scale_y_log10() + 
-  theme( axis.text.x = element_text( angle = -45, hjust = 0)) + 
-  ggsave('output/figures/cover_series_detail_with_predictions.png', 
-         height = 7, width = 10, units = 'in', dpi = 'print')
+# cover_plot  + 
+#   facet_grid( type ~ ecogroup , scales = 'free_y') + 
+#   geom_line(data = pred_df, aes( y = yhat )) + 
+#   scale_y_log10() + 
+#   theme( axis.text.x = element_text( angle = -45, hjust = 0)) + 
+#   ggsave('output/figures/cover_series_detail_with_predictions.png', 
+#          height = 7, width = 10, units = 'in', dpi = 'print')
 
 agb_biomass_plot + 
   facet_grid( type ~ ecogroup, scales = 'free_y' ) + 
   theme( axis.text.x = element_text( angle = -45, hjust = 0)) + 
-  ggsave('output/figures/biomass_series_detail.png', 
+  ggsave('output/figures/Fig_3_biomass_series_by_ecoregion.png', 
        height = 4, width = 10, units = 'in', dpi = 'print')
 
 dat %>% 
@@ -292,14 +295,14 @@ dat %>%
 cover_plot_no_lines <- cover_plot
 cover_plot_no_lines$layers[[2]] <- NULL 
 
-cover_plot_no_lines + 
-  stat_summary(aes( y = yhat), 
-               fun = function(x) median(x), 
-               geom = 'line', linetype = 2, size = 0.5) + 
-  facet_grid( Class ~ ecogroup, scales = 'free_y') + 
-  theme( axis.text.x = element_text(angle = -45, hjust = 0)) + 
-  ggsave(filename = 'output/figures/cover_over_time_HORIZONTAL_with_fitted_lines.png', 
-         dpi = 'print', height = 6, width = 10, units = 'in')
+# cover_plot_no_lines + 
+#   stat_summary(aes( y = yhat), 
+#                fun = function(x) median(x), 
+#                geom = 'line', linetype = 2, size = 0.5) + 
+#   facet_grid( Class ~ ecogroup, scales = 'free_y') + 
+#   theme( axis.text.x = element_text(angle = -45, hjust = 0)) + 
+#   ggsave(filename = 'output/figures/cover_over_time_HORIZONTAL_with_fitted_lines.png', 
+#          dpi = 'print', height = 6, width = 10, units = 'in')
 
 herbs <- cover_plot %+% 
   (dat2 %>% filter( Class == 'Herbaceous')) + 
@@ -322,7 +325,7 @@ full_legend <- get_legend(cover_plot)
 grid.arrange(herbs, woody, as_ggplot(full_legend),  
              layout_matrix = layout , 
              widths = c(1, 1.25, 0.5)) %>%   
-  ggsave(filename = 'output/figures/Fig_2_vegetation_over_time.png', 
+  ggsave(filename = 'output/figures/Herbaceous_and_Woody_veg_series.png', 
           dpi = 'print', height = 8, width = 8, units = 'in')
 
 # Variance Plots 
@@ -332,18 +335,21 @@ vc <- lapply(vc, data.frame )
 
 cover_types  <- c( str_extract( cover_model_files, pattern = '[A-Z]+') )
 cover_types <- cover_types[cover_types!='HERB']
+
 cover_types <- factor( cover_types, 
                        labels = c('Annual', 
                                   'Bare Ground', 
                                   'Perennial',
                                   'Shrub',
                                   'Tree'))
+
 vc <- mapply(x =cover_types, y = vc, 
              function(x, y) {y$type <- x; return(y)}, SIMPLIFY = F)
 
+
 vc_agb <- lapply(agb_models, VarCorr )
 vc_agb <- lapply( vc_agb, data.frame)
-agb_types  <- c( str_extract(basename( agb_model_files), pattern = '[a-z]+') )
+agb_types  <- c( str_extract(basename( agb_model_files), pattern = '[A-Z]+') )
 agb_types <- factor( agb_types, labels = c('Annual Biomass','Herb Biomass', 'Perennial Biomass'))
 vc_agb <- mapply( x = agb_types, y = vc_agb, function(x,y){y$type <- x; return(y)}, SIMPLIFY = F)
 
@@ -408,9 +414,10 @@ RE_plot1 <- intcpt_variance %>%
   theme(axis.text.x = element_text(angle = - 30, hjust = 0), 
         axis.title.x = element_blank()) + 
   ylab( 'Intercept Error Variance') + 
-  scale_fill_manual(values = group_variance_colors) + 
-  ggsave( 'output/figures/Fig_9a_Intercept_Error_Variance.png', 
-        width = 7, height = 4, dpi = 'print', units = 'in')
+  scale_fill_manual(values = group_variance_colors)  
+
+# RE_plot1 + ggsave( 'output/figures/Fig_S2_Intercept_Error_Variance.png', 
+#         width = 7, height = 4, dpi = 'print', units = 'in')
 
 RE_plot2 <- trend_variance %>% 
   group_by(type_labels) %>% 
@@ -428,11 +435,14 @@ RE_plot2 <- trend_variance %>%
   theme(axis.text.x = element_text(angle = - 30, hjust = 0), 
         axis.title.x = element_blank()) + 
   scale_fill_manual(values = group_variance_colors) + 
-  ylab( 'Trend (year-effect) Error Variance') + 
-  ggsave( 'output/figures/Fig_9b_Trend_Error_Variance.png', 
-          width = 7, height = 4, dpi = 'print', units = 'in')
+  ylab( 'Trend Error Variance')  
 
-intcpt_variance %>% 
+
+# RE_plot2 + 
+#   ggsave( 'output/figures/Fig_9b_Trend_Error_Variance.png', 
+#           width = 7, height = 4, dpi = 'print', units = 'in')
+
+variance_plots <- intcpt_variance %>% 
   mutate( type2 = "Random Intercept") %>% 
   dplyr::select( Group, vcov, type2, type, type_labels, prop_var ) %>% 
   rbind(trend_variance %>% 
@@ -455,8 +465,11 @@ intcpt_variance %>%
   theme(axis.text.x = element_text(angle = - 30, hjust = 0), 
         axis.title.x = element_blank()) + 
   scale_fill_manual(values = group_variance_colors) + 
-  ylab( 'Error Variance' ) + 
-  ggsave( 'output/figures/Fig_S2_random_error_plot_combined.png',
+  ylab( 'Error Variance' ) 
+
+  
+variance_plots + 
+  ggsave( 'output/figures/Fig_S2_Variance_Plots_Combined.png',
           height = 7, width = 8, dpi = 'print', units = 'in')
 
 

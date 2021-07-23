@@ -6,16 +6,9 @@ library(sf)
 library(lme4)
 library(emmeans)
 library(GGally)
-source('code/analysis/plot_tools.R')
 
-
-model_fls <- dir('output', pattern = 'trend_model.rds' ,full.names =T )
-model_names <- str_extract(basename(model_fls), pattern = '[A-Za-z]+_[a-z]+')
-
-model_list <- data.frame( model_names = model_names , file = model_fls) %>% 
-  separate( model_names , c('type', 'unit')) %>%
-  mutate( type = str_to_upper(type )) %>% 
-  filter( type != 'HERB' , unit != 'agb')
+source('code/analysis/functions.R')
+source('code/analysis//parameters.R')
 
 format_ranefs <- function( x , type = 'AFG'){ 
   
@@ -36,6 +29,16 @@ format_ranefs <- function( x , type = 'AFG'){
   
   return(x)
 } 
+
+
+model_fls <- dir('output', pattern = 'cover_trend_model.rds' ,full.names =T )
+model_names <- str_extract(basename(model_fls), pattern = '[A-Za-z]+_[a-z]+')
+
+model_list <- data.frame( model_names = model_names , file = model_fls) %>% 
+  separate( model_names , c('type', 'unit')) %>%
+  mutate( type = str_to_upper(type )) %>% 
+  filter( type != 'HERB' , unit != 'agb')
+
 
 out <- list()
 for( i in 1:nrow( model_list )){ 
@@ -107,10 +110,15 @@ ecogroup_cor <- ecogroup_year2 %>%
   cor( . , use = 'pairwise') %>% 
   round( . , 2 )
 
-write_lines(knitr::kable(year_cor),file = 'output/cover_year_cor.txt')
-write_lines(knitr::kable(ecogroup_cor),file = 'output/cover_ecogroup_trend_cor.txt')
-write_lines(knitr::kable(office_cor),file = 'output/cover_office_trend_cor.txt')
-write_lines(knitr::kable(allotment_cor),file = 'output/cover_allotment_trend_cor.txt')
+
+write_lines(knitr::kable(year_cor, caption = 'Year Effects') , 
+            file = 'output/tables/trend_correlation_table.html')
+write_lines(knitr::kable(ecogroup_cor, caption = 'Ecogroup Trends'),
+            file = 'output/tables/trend_correlation_table.html', append = T)
+write_lines(knitr::kable(office_cor, caption = 'Office Trends'),
+            file = 'output/tables/trend_correlation_table.html', append = T)
+write_lines(knitr::kable(allotment_cor, caption = 'Allotment Trends'),
+            file = 'output/tables/trend_correlation_table.html', append = T)
 
 test <- year_intercept %>% 
   separate( Group, into = c('year', 'region'), sep = ':') %>% 

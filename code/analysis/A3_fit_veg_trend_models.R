@@ -1,204 +1,18 @@
 rm(list = ls())
 library(tidyverse)
-library(dbplyr)
-require( RPostgres  )
-library(sf)
 library(lme4)
 library(emmeans)
 library(optimx)
 library(dfoptim)
-library(parallel)
 
-source('code/analysis/plot_tools.R')
+source('code/analysis/functions.R')
+source('code/analysis/parameters.R')
 
-con <- DBI::dbConnect(
-  RPostgres::Postgres(),
-  dbname = 'blm', 
-  user = 'andy', 
-  port = '5432'
-)
-
-
-allotments <- tbl(con, 'allotments') %>% 
-  select( uname, allot_name, admin_st, 
-          parent_cd, parent_name, admu_name, 
-          ecogroup, acres, area, climate_region) %>% 
-  mutate( district_label = str_remove( parent_name, ' District.*$')) %>% 
-  mutate( 
-    office_label = str_remove_all(str_squish(str_trim (admu_name) ), 
-                                  pattern = c(' Field.*$'))) 
-
-annual_data <- 
-  tbl(con, 'annual_data') %>% 
-  filter( year  > 1990 ) %>%
-  filter( value > 0 ) %>% 
-  left_join(allotments, by = 'uname') %>% 
-  filter( ecogroup != "Coastal Forests")
-
-agb <- annual_data %>% 
-  filter( type %in% c('pfgAGB', 'afgAGB')) %>% 
-  pivot_wider(names_from = type, values_from = value ) %>%
-  mutate( herb_agb = pfgAGB + afgAGB ) %>%
-  pivot_longer(c('pfgAGB', 'afgAGB', 'herb_agb'), 
-               names_to = 'type', values_to = 'value' ) %>% 
-  group_by( type, uname) %>% 
-  filter( min(value, na.rm = T) > 0.5 ) %>%
-  select( type, uname, year,value, admin_st, district_label, office_label, ecogroup, climate_region, area) %>% 
-  collect() %>% 
-  as.data.frame() %>% 
-  group_by( type, uname) %>% 
-  filter( !any(is.na(value))) %>% 
-  ungroup() %>% 
-  split(f = .$type ) 
-
-agb <- 
-  agb %>% 
-  lapply( function(x){ 
-    x %>% 
-      mutate( value2 = scale(log(value)), 
-              value1 = log(value)) %>%
-      mutate( year2 = scale(year), 
-              area2 = scale(area, center = F ))
-    }) 
-
-
-afg_attributes <- attributes( agb$afgAGB$value2)
-pfg_attributes <- attributes( agb$pfgAGB$value2)
-herb_attributes <- attributes(agb$herb_agb$value2)
-
-# test back-transformation 
-stopifnot( 
-  all.equal( back_transform(agb$afg$value2[1:10], afg_attributes), 
-             agb$afg$value[1:10] ) ) 
-
-
-# AFG TRENDS
-# Basic analysis formula for finding long-term annual trend in the data 
-attach(agb)
-write_csv(agb$pfgAGB, file = 'data/temp/pfg_agb.csv')
-basic_form <- formula( value2 ~ year2*ecogroup +  
-                         (year2|office_label) + (year2|uname) + (1|year:climate_region))
-
-# sample_uname <- pfgAGB %>% 
-#   select( ecogroup, office_label, uname ) %>% 
-#   arrange( ecogroup,  office_label, uname) %>%
-#   distinct() %>%
-#   group_by(ecogroup, office_label) %>% 
-#   filter( row_number() < 10 ) %>% 
-#   pull(uname)
-# 
-# # 
-# sample_dat <- pfgAGB %>% filter( uname %in% sample_uname )
-# 
-# m_pfg_agb <- lmer(formula = basic_form, 
-#                   data = sample_dat)
-# 
-# # check singularity 
-# tt <- getME(m_pfg_agb,"theta")
-# ll <- getME(m_pfg_agb,"lower")
-# min(tt[ll==0])
-# 
-# m_pfg_agb@optinfo
-# summary(m_pfg_agb)
-# 
-# meth_tab <- data.frame( allFit(show.meth.tab=TRUE)  ) %>% 
-#   bind_rows( data.frame( optimizer = 'optimx', method = c('nlminb' , 'bobyqa', 'BFGS')))
-# 
-# ncores <- parallel::detectCores()
-# 
-# diff_optims <- allFit(m_pfg_agb, 
-#                       meth.tab = meth_tab, 
-#                       maxfun = 1e5, 
-#                       parallel = 'multicore', ncpus = ncores)
-# 
-# summary(diff_optims)
-# Try with full dataset 
-m_pfg_agb <- lmer(formula = basic_form, 
-                  data = pfgAGB, 
-                  control = control_lmer)
-
-saveRDS(m_pfg_agb, file = 'output/pfg_agb_trend_model.rds')
-
-m_afg_agb <- lmer(formula = basic_form, 
-                  data = afgAGB, 
-                  control = control_lmer)
-
-summary(m_afg_agb)
-
-saveRDS(m_afg_agb, file = 'output/afg_agb_trend_model.rds')
-
-m_herb_agb <- lmer(data = herb_agb, 
-                   basic_form, 
-                   control = control_lmer)
-
-saveRDS(m_herb_agb, file = 'output/herb_agb_trend_model.rds')
-
-# Check convergence with different methods, could take a while ---------------------------- # 
-# diff_optims <- allFit(m_pfg_agb, 
-#                       meth.tab = meth_tab, 
-#                       maxfun = 1e6, 
-#                       parallel = 'multicore', 
-#                       ncpus = ncores)
-
-# ------------- # 
-
-afg_fixed <- get_ecogroup_trends(m_afg_agb)
-afg_random <- get_blm_random_effects(m_afg_agb)
-afg_trends <- blm_trend_summary( afgAGB, afg_fixed, afg_random)
-
-stopifnot( all(complete.cases(afg_trends)))
-
-# PFG TRENDS
-pfg_fixed <- get_ecogroup_trends(m_pfg_agb)
-pfg_random <- get_blm_random_effects(m_pfg_agb)
-pfg_trends <- blm_trend_summary( pfgAGB, pfg_fixed, pfg_random)
-
-# Herbaceous AGB Trends AFG + PFG = Total Herbaceous 
-herb_fixed <- get_ecogroup_trends(m_herb_agb)
-herb_random <- get_blm_random_effects(m_herb_agb)
-herb_trends <- blm_trend_summary(herb_agb, herb_fixed, herb_random)
-
-# SAVE AGB models and output 
-write_csv(afg_trends, file = 'output/afg_group_agb_trends.csv')
-write_csv(pfg_trends, file = 'output/pfg_group_agb_trends.csv')
-write_csv(herb_trends, file = 'output/herb_group_agb_trends.csv')
-
-detach(agb)
-rm( agb, m_afg_agb, m_pfg_agb, m_herb_agb)
-
-# Cover trends: 
-cover <- 
-  annual_data %>%  
-  filter( type %in% c('AFGC', 'PFGC', 'BG', 'TREE', 'SHR')) %>% 
-  pivot_wider(names_from = type, values_from = value ) %>%
-  mutate( HERB = AFGC + PFGC ) %>%
-  pivot_longer( c('AFGC', 'PFGC', 'BG', 'TREE', 'SHR', 'HERB'), 
-               names_to = 'type', values_to = 'value' )  %>% 
-  group_by( type, uname) %>% 
-  filter( min(value, na.rm = T) > 0.5 ) %>%
-  select( type, uname, year,value, admin_st, district_label, office_label, ecogroup, area, climate_region) %>% 
-  collect() %>% 
-  as.data.frame() %>% 
-  group_by( type, uname) %>% 
-  filter( !any(is.na(value))) %>% 
-  ungroup() %>% 
-  split(f = .$type ) 
-
-cover <- cover %>% lapply( 
-  function(x) { 
-    x %>% mutate( value2 = scale(log(value))) %>%
-      mutate( year2 = scale(year), 
-              area2 = scale(area, center = F)) }) 
-
-save(cover, file = 'output/cover.rda')
-attach( cover )
+load('data/temp/cover.rda')
+attach(cover)
 
 # Fit annual cover data 
 m_afgc <- lmer(data = AFGC, basic_form, control = my_control)
-tt <- getME(m_afgc,"theta")
-ll <- getME(m_afgc,"lower")
-min(tt[ll==0])
-
 ecogroup_effects <- get_ecogroup_trends( m_afgc) 
 random_effects <- get_blm_random_effects( m_afgc)
 AFGC_trends <- blm_trend_summary( AFGC , ecogroup_effects, random_effects) 
@@ -252,3 +66,104 @@ write_csv(herb_trends, file = 'output/HERB_cover_group_trends.csv')
 
 detach(cover )
 rm( cover ) 
+
+load('data/temp/agb.rda')
+attach(agb)
+afg_attributes <- attributes( afgAGB$value2)
+pfg_attributes <- attributes( pfgAGB$value2)
+herb_attributes <- attributes(herb_agb$value2)
+
+# test back-transformation 
+stopifnot( 
+  all.equal( back_transform(afgAGB$value2[1:10], afg_attributes), 
+             afgAGB$value[1:10] ) ) 
+
+# AFG TRENDS
+# Basic analysis formula for finding long-term annual trend in the data 
+
+# sample_uname <- pfgAGB %>% 
+#   select( ecogroup, office_label, uname ) %>% 
+#   arrange( ecogroup,  office_label, uname) %>%
+#   distinct() %>%
+#   group_by(ecogroup, office_label) %>% 
+#   filter( row_number() < 10 ) %>% 
+#   pull(uname)
+# 
+# # 
+# sample_dat <- pfgAGB %>% filter( uname %in% sample_uname )
+# 
+# m_pfg_agb <- lmer(formula = basic_form, 
+#                   data = sample_dat)
+# 
+# # check singularity 
+# tt <- getME(m_pfg_agb,"theta")
+# ll <- getME(m_pfg_agb,"lower")
+# min(tt[ll==0])
+# 
+# m_pfg_agb@optinfo
+# summary(m_pfg_agb)
+# 
+# meth_tab <- data.frame( allFit(show.meth.tab=TRUE)  ) %>% 
+#   bind_rows( data.frame( optimizer = 'optimx', method = c('nlminb' , 'bobyqa', 'BFGS')))
+# 
+# ncores <- parallel::detectCores()
+# 
+# diff_optims <- allFit(m_pfg_agb, 
+#                       meth.tab = meth_tab, 
+#                       maxfun = 1e5, 
+#                       parallel = 'multicore', ncpus = ncores)
+# 
+# summary(diff_optims)
+
+# AFG AGB TRENDS
+m_afg_agb <- lmer(formula = basic_form, 
+                  data = afgAGB, 
+                  control = control_lmer)
+afg_fixed <- get_ecogroup_trends(m_afg_agb)
+afg_random <- get_blm_random_effects(m_afg_agb)
+afg_trends <- blm_trend_summary( afgAGB, afg_fixed, afg_random)
+
+stopifnot( all(complete.cases(afg_trends)))
+
+
+# PFG AGB Trends 
+m_pfg_agb <- lmer(formula = basic_form, 
+                  data = pfgAGB, 
+                  control = control_lmer)
+
+pfg_fixed <- get_ecogroup_trends(m_pfg_agb)
+pfg_random <- get_blm_random_effects(m_pfg_agb)
+pfg_trends <- blm_trend_summary( pfgAGB, pfg_fixed, pfg_random)
+
+
+# Herbaceous: AFG + PFG = Total Herbaceous 
+m_herb_agb <- lmer(data = herb_agb, 
+                   basic_form, 
+                   control = control_lmer)
+herb_fixed <- get_ecogroup_trends(m_herb_agb)
+herb_random <- get_blm_random_effects(m_herb_agb)
+herb_trends <- blm_trend_summary(herb_agb, herb_fixed, herb_random)
+
+
+# Check convergence with different methods, could take a while ---------------------------- # 
+# diff_optims <- allFit(m_pfg_agb, 
+#                       meth.tab = meth_tab, 
+#                       maxfun = 1e6, 
+#                       parallel = 'multicore', 
+#                       ncpus = ncores)
+
+# ------------- # 
+
+# SAVE AGB models and output 
+# Herbaceous AGB Trends AFG + PFG = Total Herbaceous 
+
+saveRDS(m_afg_agb, file = 'output/AFG_agb_trend_model.rds')
+saveRDS(m_pfg_agb, file = 'output/PFG_agb_trend_model.rds')
+saveRDS(m_herb_agb, file = 'output/HERB_agb_trend_model.rds')
+
+write_csv(afg_trends, file = 'output/AFG_agb_group_trends.csv')
+write_csv(pfg_trends, file = 'output/PFG_agb_group_trends.csv')
+write_csv(herb_trends, file = 'output/HERB_agb_group_trends.csv')
+
+detach(agb)
+rm( agb, m_afg_agb, m_pfg_agb, m_herb_agb)
