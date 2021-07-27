@@ -4,7 +4,9 @@ library(lme4)
 library(emmeans)
 library(lmerTest)
 
-source('code/analysis/plot_tools.R')
+source('code/analysis/functions.R')
+source('code/analysis/parameters.R')
+
 load( 'output/phenology_models.rda')
 
 # GSL_mer@frame %>% 
@@ -46,7 +48,6 @@ pheno_trends_vert <-
   scale_x_continuous('Trend (days per year)') + 
   guides(color = F) + 
   theme( strip.text.y = element_text( angle = 0 )) 
-
 
 # Predict Growing Season Length over time per year --------------- # 
 dat <- GSL_mer@frame

@@ -66,7 +66,8 @@ dev.off()
 library(DBI)
 library(dbplyr)
 
-source('code/analysis/plot_tools.R')
+source('code/analysis/functions.R')
+source('code/analysis/parameters.R')
 
 con <- DBI::dbConnect(
   RPostgres::Postgres(),
@@ -103,7 +104,7 @@ for( i in 1:length(trend_table_files)){
       geom_sf(data = trends, aes( color = full_trend ), alpha = 0.7, size = 1) + 
       geom_sf(fill = NA) + 
       scale_color_gradient(low = 'blue', high = 'red') + 
-      ggtitle(trend_types)
+      ggtitle(trend_types[i])
   )
   
 }

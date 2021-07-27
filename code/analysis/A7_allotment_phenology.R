@@ -2,9 +2,6 @@ rm(list = ls())
 library(tidyverse)
 library(DBI)
 library(dbplyr)
-require( RPostgres  )
-require( rpostgis )
-library(sf)
 
 con <- DBI::dbConnect(
   RPostgres::Postgres(),
@@ -33,7 +30,7 @@ temp <- npp_16 %>%
 temp <- temp %>% 
   filter( year > 1990 )
 
-# Find allotments with at least 29 years of data 
+# Find allotments with at least X years of data 
 year_counts <- temp %>%
   group_by( uname) %>%
   summarise( nyears = n_distinct(year))
@@ -49,7 +46,6 @@ temp <- temp %>%
   window_order( uname, year, doy ) %>% 
   mutate(herb_npp_cmsm = cumsum( herb_npp ) ) %>% 
   ungroup() 
-
 
 critical_stats <- temp %>% 
   select( uname, year ) %>%
@@ -75,8 +71,18 @@ critical_stats <- temp %>%
   mutate( B = herb_npp_cmsm_hi - m*doy_hi) %>% 
   mutate( doy_crit = (herb_npp_crit - B)/m ) 
   
+allotments <- tbl( con, 'allotments') %>% 
+  mutate( district_label = str_remove( parent_name, ' District.*$')) %>% 
+  mutate( 
+    office_label = str_remove_all(str_squish(str_trim (admu_name) ), 
+                                  pattern = c(' Field.*$'))) 
 
-critical_stats %>% 
+allotments %>% 
+  filter( ecogroup != 'Coastal Forests') %>%
+  #left_join(elevation, by = 'uname') %>% 
+  left_join( critical_stats, by = 'uname') %>% 
+  ungroup() %>% 
   collect() %>% 
-  write_rds(file = 'data/temp/allotment_growing_season.rds')
+  write_rds( file = 'data/temp/allotment_phenology.rds')
+
 
