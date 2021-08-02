@@ -19,30 +19,36 @@ library(leafpop)
 ##############
 ##############
 
-load('data/mapdata.rda') 
+load('data/mapdata.rda')
+load('data/vegdata.rda')
+source('functions.R')
 
+# load('app/data/mapdata.rda')
+# load('app/data/vegdata.rda')
+# source( 'app/functions.R')
 
-#load('app/data/mapdata.rda')
 ##############
 ##############
-main_title <- "Rangeland Cover Trends in BLM Allotments"
+
+main_title <- "Rangeland Vegetation on BLM Allotments"
 subtitle <- paste("Updated on", last_year)
 map_title <- "BLM Grazing Allotments"
 plotly_title <- "Selected allotment (click on map)"
-map_legend_title <- "Cover Trend (% per year)"
+
+hoverformat <- c(cover = "%{text}: %{y:.0f}%", 
+                 production = "%{text}: %{y:0f} kg/ha")
 
 x_title <- "Year"
-y_title <- "Cover"
+y_title <- c( cover = "Cover (%)", production = 'Production (kg/ha)')
+
 x_range <- c(first_year, last_year + 1 )
 default_name <- ''
-
 
 RAP_link <-
   "https://rangelands.app/"
 
 latest_update_link <-
   "https://rangelands.app/"
-
 
 about <-
   '<!DOCTYPE html>
@@ -60,18 +66,6 @@ the plant cover categories above.  Cover data is derived from the <a href = "htt
 </html>'
 
 
-plotly_hoverformat <-  "%{text}: %{y:.0f}"
-
-
-empty_plot <- function(title = NULL) {
-  
-  plotly_empty(type = "scatter", mode = "markers") %>%
-    config(displayModeBar = FALSE) %>%
-    layout(title = list(text = title,
-                        yref = "paper",
-                        y = 0.5))
-  
-}
 
 
 #, "select all" = all_OFC_CD)
@@ -86,9 +80,15 @@ ui <- fluidPage(
       # selectInput("ADM_OFC_CD", "Select BLM Districts:", 
       #             choices = office_list, 
       #             selected = c('L06000'), multiple = T),
-      selectInput("type", "Select Cover Type for Map:", 
-                  choices = unique( veg$type ), 
-                  selected = "AFGC", multiple = F),
+      selectInput("type", "Select Vegetation Type:", 
+                  choices = unique( veg$type_label), 
+                  selected = "Annual", multiple = F),
+      selectInput("unit", "Select Unit", 
+                  choices = unique(veg$unit), 
+                  selected = 'cover', multiple = F), 
+      selectInput("scale", "Select Scale of Comparison", 
+                  choices = c('Ecoregion', 'District', 'Field Office'), 
+                  selected = 'Ecoregion', multiple = F), 
       # selectInput("year", "Select year:", 
       #             choices = unique(cover$year), 
       #             selected = 2000), 
@@ -115,14 +115,6 @@ server <- function(input, output) {
   })
   
   output$map <- renderLeaflet({
-    
-    #input <- list( type = 'AFGC', ADM_OFC_CD = 'B01000', year = 2000)
-    
-  
-    
-    # pal_cover <-colorNumeric(palette= "RdBu",
-    #                          domain = map_data$trend,
-    #                          na.color = 'lightgrey')
     
     center_ll <- c(-114.07, 42.04) 
     
@@ -184,39 +176,50 @@ server <- function(input, output) {
     
     if( !is.null(id()) ){
       
-      temp_name <- 
-        allotment_shps %>% 
-        filter( uname == id()) %>% 
-        pull('Name')
+      choices <- c(uname = id(), 
+                   unit = input$unit, 
+                   type = input$type, 
+                   scale = input$scale)
       
-      veg %>%
-        filter( uname == id()) %>% 
-        group_by( type ) %>% 
-        plot_ly( x = ~ year, y = ~ values, text = ~ type) %>%
-        add_lines( color = ~ type,
-                   hovertemplate = paste(
-                     "<br>",
-                     plotly_hoverformat,
-                     "<extra></extra>")) %>% 
-        layout( 
-          xaxis = list(
-            title = x_title,
-            showgrid = FALSE,
-            autotick = T,
-            range = x_range
-          ),
-          yaxis = list(title = 'cover', 
-                       showgrid = FALSE,
-                       range = c(0, 100), 
-                       rangemode = "tozero"), 
-          title = list(
-            text = temp_name,
-            x = 0.1,
-            y = 0.9,
-            xref = "paper",
-            yref = 'paper'
-          )) %>%
-        config(displayModeBar = F)
+      scale_labs = c('Ecoregion' = 'Ecoregion', 'District' = 'District', 
+                     `Field Office` = 'Field_Office')
+      
+      # choices <- c(uname = 1000,
+      #              unit = 'cover',
+      #              type = 'Annual',
+      #              scale = 'Field Office')
+      
+      temp_data <- format_ts_data(map_data, veg, choices ) 
+      
+      temp_allotment_name <- 
+        temp_data %>% 
+        distinct(Name) %>% 
+        pull(Name)
+      
+      temp_Ecoregion <- 
+        temp_data %>% 
+        distinct( Ecoregion) %>% pull(Ecoregion)
+      
+      temp_District <- 
+        temp_data %>% 
+        distinct( District) %>% pull(District) 
+      
+      temp_field_office <- 
+        temp_data %>% 
+        distinct( `Field_Office`) %>% pull( `Field_Office`)
+      
+      # Choose comparison scale  
+      # These will be user selected to display 
+      # ecoregion, district or field office aggregation of data 
+      
+      fig_pars <- list( 
+        hoverformat = hoverformat, 
+        x_title = x_title, 
+        x_range = x_range, 
+        y_title = y_title, 
+        temp_allotment_name = temp_allotment_name)
+      
+      allotment_timeseries_plotly(temp_data, choices, fig_pars)  
       
     }else{
       

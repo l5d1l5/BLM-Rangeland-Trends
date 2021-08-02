@@ -7,7 +7,6 @@ library(sf)
 library(lme4)
 library(emmeans)
 
-
 con <- DBI::dbConnect(
   RPostgres::Postgres(),
   dbname = 'blm', 
