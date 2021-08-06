@@ -42,8 +42,10 @@ field_office_veg <- veg %>%
              lq= quantile(value, 0.25))
 
 
-save(veg, ecoregion_veg, 
+save(veg, 
+     ecoregion_veg, 
      district_veg, 
      field_office_veg, 
-     last_year, first_year, 
+     last_year, 
+     first_year, 
      file = 'app/data/vegdata.rda')

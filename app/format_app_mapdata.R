@@ -3,6 +3,8 @@ rm(list= ls())
 library(tidyverse)
 library(sf)
 
+source('app/parameters.R')
+load('app/data/trenddata.rda')
 allotments <- read_csv(file = 'output/export_data/allotment_table.csv')
 shapes <- read_rds(file = 'output/export_data/BLM_allotments_sf.rds')
 
@@ -30,55 +32,16 @@ allotments <- allotments %>%
     mutate( District = str_remove( District,  pattern = " DISTRICT OFFICE")) %>%
     mutate( `Field Office` = str_to_title(`Field Office`), 
             District = str_to_title( District ), 
-            Ecoregion = str_to_title(Ecoregion))
-
+            Ecoregion = str_to_title(Ecoregion)) %>% 
+  left_join(all_trends , by = 'uname')
 
 allotment_ctrs <- centers %>% left_join(allotments, by = 'uname')
 allotment_shps <- shapes %>% left_join(allotments, by = 'uname')
 
 ##############
-##############
-table_html <-
-  '<table style="width:100%%">
-<tr>
-<th><span style="float:left"> %s </span><br/></th>
-</tr>
-<tr>
-<td><span style="float:left"> BLM ID </span><br/></td>
-<td><span style="float:right"> %s </span><br/></td>
-</tr>
-<tr>
-<td><span style="float:left"> District </span><br/></td>
-<td><span style="float:right"> %s </span><br/></td>
-</tr>
-<tr>
-<td><span style="float:left"> Field Office </span><br/></td>
-<td><span style="float:right"> %s </span><br/></td>
-</tr>
-<tr>
-<td><span style="float:left"> Ecoregion </span><br/></td>
-<td><span style="float:right"> %s </span><br/></td>
-</tr>
-<tr>
-<td><span style="float:left"> Acres </span><br/></td>
-<td><span style="float:right"> %.0f </span><br/></td>
-</tr>
-</table>'
-
-# veg <- veg %>% 
-#   filter( type %in% 
-#             c('AFGC','PFGC', 'BG', 'SHR', 'TREE', 'LTR')) %>% 
-#   spread( type , value )
-# 
-
 # Map Data 
-map_data <- 
-  allotment_ctrs %>% 
-  # filter( ADM_OFC_CD %in% input$ADM_OFC_CD ) %>% 
-  select( uname, Name, `BLM ID`,  District, `Field Office`, Ecoregion, acres ) 
-
 label_df <-
-  map_data %>%
+  allotment_ctrs %>%
   st_drop_geometry() 
 
 labels <- sprintf(
@@ -91,5 +54,14 @@ labels <- sprintf(
   as.numeric(label_df$acres)) %>% 
   lapply(htmltools::HTML)
 
-save(allotment_shps, labels, map_data,
+
+# allotment_shps <- allotment_shps %>% st_cast('POLYGON') 
+# allotment_ctrs <- allotment_ctrs %>% st_cast('POINT') 
+# 
+# allotment_shps <- allotment_shps %>% head(1000)
+# allotment_ctrs <- allotment_ctrs %>% head(1000)
+# 
+# labels <- labels[1:1000]
+
+save(allotment_ctrs, allotment_shps, labels,
      file = 'app/data/mapdata.rda')
