@@ -100,12 +100,12 @@ plot_trend_coefficients_vertical <- function(my_trend_table, my_colors ) {
   
   my_trend_table %>%   
     ggplot(aes( x = year2.trend, y = type, color = type  )) + 
+    geom_vline( aes( xintercept = 0 ), linetype = 2, alpha = 0.5) + 
     geom_point() + 
     geom_errorbar(aes( xmin = asymp.LCL, xmax = asymp.UCL)) + 
-    geom_vline( aes( xintercept = 0 ), linetype = 2, alpha = 0.5) + 
     facet_grid( ecogroup ~ . , switch = 'y') + 
     scale_x_continuous(name = 'Trend Coefficient') + 
-    scale_color_manual(values = my_colors , guide = guide_legend(reverse = T)) + 
+    scale_color_manual(values = my_colors) + 
     theme_bw() + 
     theme(axis.text.y = element_blank(), 
           axis.title.y = element_blank(), 
@@ -129,66 +129,47 @@ get_ecogroup_trends <- function( model ){
 
 get_blm_random_effects <- function( model ) { 
   
-  dist_effects <- ranef(model)$district_label 
-  office_effects <- ranef(model)$office_label
-  allot_effects <- ranef(model)$uname
+  re <- ranef(model)
   
-  out <- list( dist_effects, office_effects, allot_effects ) 
-  names( out ) <- c("dist_effects", "office_effects", "allot_effects")
+  #state <- re$admin_st
+  office <- re$`ecogroup:office_label`
+  allotment <- re$uname
   
-  out$allot_effects$uname <- as.integer( row.names( out$allot_effects ) )
-  out$dist_effects$district_label <- row.names( out$dist_effects )
-  out$office_effects$office_label <- row.names( out$office_effects)
+  out <- list(office, allotment ) 
+  names( out ) <- c("office", "allotment")
+
   
-  out$dist_effects$district_trend <- out$dist_effects$year2
-  out$office_effects$office_trend <- out$office_effects$year2
-  out$allot_effects$allot_trend <- out$allot_effects$year2
+  out$office$office_label <- row.names( out$office)
+  out$allotment$uname <- as.integer( row.names( out$allotment ))
+
+  
+  out$office$office_trend <- out$office$year2
+  out$allotment$allot_trend <- out$allotment$year2
   
   return( out )
 } 
 
 
+
 blm_trend_summary <- function( my_data, ecogroup_trends, group_trends ){ 
   
-  if( all( !is.null( nrow( group_trends$allot_effects )), 
-           !is.null( nrow( group_trends$office_effects)), 
-           !is.null( nrow( group_trends$dist_effects))) ){ 
-    my_data %>% 
-      distinct(ecogroup, district_label, office_label, uname) %>%
-      mutate( ecogroup_trend = ecogroup_trends[ecogroup]) %>%
-      left_join( group_trends$dist_effects, by = 'district_label') %>%
-      left_join( group_trends$office_effects, by = 'office_label') %>% 
-      left_join( group_trends$allot_effects, by = 'uname') %>%
-      dplyr::select( uname, ecogroup, district_label, office_label, 
-                     ecogroup_trend, district_trend, office_trend, allot_trend ) %>%
-      rowwise() %>% 
-      mutate( full_trend = ecogroup_trend + district_trend + 
-                office_trend + allot_trend )
-  }else if( all( !is.null( nrow( group_trends$allot_effects )), 
-                 !is.null( nrow( group_trends$office_effects)))){ 
+  if( all( 
+    !is.null( nrow( group_trends$allotment) ), 
+    !is.null( nrow( group_trends$office)))){ 
     my_data %>% 
       distinct(ecogroup, office_label, uname) %>%
+      mutate( office_label = paste0(ecogroup, ':', office_label)) %>% 
       mutate( ecogroup_trend = ecogroup_trends[ecogroup]) %>%
-      left_join( group_trends$office_effects, by = 'office_label') %>% 
-      left_join( group_trends$allot_effects, by = 'uname') %>%
+      left_join( group_trends$office, by = 'office_label') %>% 
+      left_join( group_trends$allotment, by = 'uname') %>%
       dplyr::select( uname, ecogroup, office_label, 
                      ecogroup_trend, office_trend, allot_trend ) %>%
       rowwise() %>% 
       mutate( full_trend = ecogroup_trend + office_trend + allot_trend )
-  }else if( all( !is.null( nrow( group_trends$district_effects )), 
-                 !is.null( nrow( group_trends$office_effects)))){
-    my_data %>% 
-      distinct(ecogroup, district_label, office_label) %>%
-      mutate( ecogroup_trend = ecogroup_trends[ecogroup]) %>%
-      left_join( group_trends$dist_effects, by = 'district_label') %>%
-      left_join( group_trends$office_effects, by = 'office_label') %>% 
-      dplyr::select(ecogroup, district_label, office_label, 
-                    ecogroup_trend, district_trend, office_trend) %>%
-      rowwise() %>% 
-      mutate( full_trend = ecogroup_trend + district_trend + office_trend )
   }
   
 }
+
 
 back_trans_frames <- function(m, type = "NAME"){ 
   dat <- m@frame

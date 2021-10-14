@@ -5,9 +5,13 @@ library(tidyverse)
 library(lubridate)
 
 m2_per_ACRE <- 4046.8564224
+m2_per_ha <- 1e4
+ACRE_per_ha <- 2.47105
 
-BLM <- sf::read_sf('data/BLM_National_Grazing_Allotments_NEW/gra.gdb/', 
+BLM <- sf::read_sf('data/BLM_National_Grazing_Allotments/gra.gdb/', 
                    layer = 'gra_allot_poly')
+
+n_original <- nrow(BLM)
 
 BLM <- 
   BLM %>%
@@ -18,7 +22,7 @@ BLM <-
   mutate( uid = row_number() )  %>% 
   mutate( ushape = as.numeric(as.factor(as.character( SHAPE )))) %>% 
   mutate( LAST_DATE = date(last_edited_date )) %>%
-  select(uid, ushape, ADMIN_ST, ADM_OFC_CD, ALLOT_NO, ALLOT_NAME, LAST_DATE ) 
+  select(uid, ushape, ADMIN_ST, ADM_OFC_CD, ALLOT_NO, ALLOT_NAME, LAST_DATE, SHAPE_Area) 
 
 temp_allotment_table <- BLM %>% st_drop_geometry()
 
@@ -34,37 +38,38 @@ temp_allotment_table %>%
 # And some are duplicates of the same allotment with 
 # different boundaries
 temp_allotment_table %>% 
-  group_by( ALLOT_NAME ) %>% 
+  group_by(ADMIN_ST, ADM_OFC_CD, ALLOT_NAME ) %>% 
   mutate( n_dup = n() ) %>% 
-  filter( n_dup > 1 ) %>% View
+  filter( n_dup > 1 ) %>% nrow()
+
 
 # Keep only first record of duplicate polygons 
+# Drops 9 polygons 
 BLM <- 
   BLM %>% 
   group_by( ushape) %>% 
-  arrange( ushape )  %>% 
-  filter( row_number() == 1 )
+  arrange( ushape, desc(LAST_DATE)) %>% 
+  filter( row_number() ==  1 ) 
 
-# drop really small polygons
-BLM <-
+n_original - ( BLM %>% nrow() )
+
+# Calculate Area 
+BLM <- 
   BLM %>%
   ungroup() %>%
   st_cast("MULTIPOLYGON") %>%
-  st_sf() %>%
-  mutate( area = st_area(SHAPE) %>% as.numeric ) %>%
-  mutate( acres = area /m2_per_ACRE ) %>%
-  filter( acres > 1 )
+  st_sf() %>% 
+  mutate( area = st_area(SHAPE) %>% as.numeric()) %>% 
+  mutate( hectare = area/m2_per_ha) 
 
-# Histogram 
+# drop really small polygons
+# less than one hectare 
+# drop 55 allotments 
 BLM %>% 
-  ggplot( aes( x = acres )) + 
-  geom_histogram() + 
-  scale_y_continuous(name = 'Number of Allotments') + 
-  scale_x_log10(name = 'Allotment Size (acres)', 
-                breaks = c(10, 40, 100, 1000, 10000, 100000), label = scales::comma) + 
-  theme_bw() + 
-  theme( panel.grid = element_blank()) + 
-  ggsave('output/allotment_histogram.png')
+  filter( hectare < 1 ) %>% 
+  nrow() 
+
+BLM <- BLM %>% filter( hectare > 1 )
 
 # Example of redundant allotment 
 BLM %>%
@@ -121,8 +126,8 @@ BLM <-
   summarise( SHAPE = st_union(SHAPE), LAST_DATE = max(LAST_DATE), FIRST_DATE = min(LAST_DATE) )  %>% 
   ungroup() %>%
   st_make_valid() %>%
-  mutate( area = st_area( SHAPE)) %>% 
-  mutate( acres = area/m2_per_ACRE )
+  mutate( area = as.numeric( st_area( SHAPE))) %>% 
+  mutate( hectares = as.numeric(area/m2_per_ha))
 
 # Check for duplicates 
 stopifnot(
@@ -132,8 +137,20 @@ stopifnot(
   group_by( uname ) %>% 
   filter( n() > 1 ) %>%nrow() == 0 )
 
-# create if don't exit 
 
+# Histogram 
+BLM %>% 
+  ggplot( aes( x = hectares )) + 
+  geom_histogram() + 
+  scale_y_continuous(name = 'Number of Allotments') + 
+  scale_x_log10(name = 'Allotment Size (Hectares)', 
+                breaks = c(10, 40, 100, 1000, 10000, 100000), label = scales::comma) + 
+  theme_bw() + 
+  theme( panel.grid = element_blank()) + 
+  ggsave('output/figures/allotment_hectares_histogram.png')
+
+
+# create if don't exit 
 dir.create('data/temp')
 dir.create('data/temp/BLM_allotments_cleaned')
 

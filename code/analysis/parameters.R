@@ -3,11 +3,24 @@
 require(tidyverse)
 require(lme4)
 
+error_scale_colors <- RColorBrewer::brewer.pal(3, 'Set2')
+names(error_scale_colors) <- c('Office', 'Allotment', 'Pixel')
 
 my_colors0 <-
   c('sienna1', 'black', '8dd3c7', '#fb8072', '#80b1d3', 'magenta')
 names(my_colors0) <-
   c("Annual", "Bare", "Perennial", "Shrub", "Tree", "Litter")
+
+type_labels <- c('AFG' = 'Annual', 
+                 'PFG' = 'Perennial', 
+                 'BG' = 'Bare Ground',
+                 'HERB' = 'Herbaceous', 
+                 'TREE' = 'Tree', 
+                 'SHR' = 'Shrub', 
+                 'LTR' = 'Litter')
+
+unit_labels  <- c('agb' = 'production', 
+                  'cover' = 'cover')
 
 # lbs /acre to kg/ha
 kgHa <- 1.12085
@@ -35,24 +48,33 @@ WESTERN_STATES <- c('AZ',
                     'WA',
                     'WY')
 
-ecogroup_colors <- RColorBrewer::brewer.pal(n = 7, 'Set2')
+ecogroup_colors <- RColorBrewer::brewer.pal(n = 8, 'Set2')
+
+ecogroup_colors
+
 names(ecogroup_colors) <- c(
-  'W Cold Deserts',
+  'W Cold Deserts', 
   'E Cold Deserts',
-  'Great Plains',
+  'Forested Mts', 
   'Mediterranean California',
-  'Forested Mts',
+  'N Great Plains',
+  'S Great Plains',
   'AZ/NM Highlands',
   'Warm Deserts'
 )
+#colors()
+ecogroup_colors['Mediterranean California']  <- 'firebrick2'
+ecogroup_colors['Forested Mts']  <- 'cornflowerblue'
+ecogroup_colors['Warm Deserts']  <- 'slategray'
 
 # For relabeling figures with shorter labels
 ecogroup_labels = c(
   'AZ/NM\nHighlands',
   'E Cold Deserts',
-  'Great Plains',
-  'Mediterranean\nCalifornia',
   'Forested Mts',
+  'Mediterranean\nCalifornia',
+  'N Great Plains', 
+  'S Great Plains',
   'W Cold Deserts',
   'Warm Deserts'
 )
@@ -62,17 +84,8 @@ group_variance_colors <-
 names(group_variance_colors) <-
   c('District', 'Field Office', 'Allotment', 'Year', 'Residual')
 
-# Model Formula
 
-basic_form <- formula(
-  value2 ~ year2 * ecogroup +
-    (year2 |
-       office_label) + (year2 | uname) + (1 | year:climate_region)
-)
-
-
-
-# GLMER/LMER optimization options
+# LMER optimization options
 control_lmer = lmerControl(
   optimizer = "optimx",
   calc.derivs = FALSE,

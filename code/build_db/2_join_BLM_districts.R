@@ -3,8 +3,16 @@ rm(list = ls())
 library(tidyverse)
 library(sf)
 
-# Run "clean_allotment_shapes" first 
+# Run "1_clean_allotment_shapes" first 
+adm_districts <- sf::read_sf('data/BLM_National_Administrative_Units/admu.gdb/', 
+                           layer = 'blm_natl_admu_dist_poly_webpub') %>% 
+  filter( ADMIN_ST != 'AK' )
 
+adm_offices <- sf::read_sf('data/BLM_National_Administrative_Units/admu.gdb/', 
+                           layer = 'blm_natl_admu_field_poly_webpub') %>%
+  filter( ADMIN_ST != 'AK')  
+
+# Get centroids for spatial joins later 
 allotment_info <- readRDS(file = 'data/temp/BLM_allotments_sf.rds') %>%
   ungroup() %>%
   st_centroid() %>%
@@ -14,14 +22,6 @@ allotment_info <- readRDS(file = 'data/temp/BLM_allotments_sf.rds') %>%
   st_drop_geometry()  %>% 
   mutate( lon = xy[,1], lat = xy[,2]) %>% 
   select( - xy )
-
-adm_districts <- sf::read_sf('data/BLM_National_Administrative_Units/admu.gdb/', 
-                           layer = 'blm_natl_admu_dist_poly_webpub') %>% 
-  filter( ADMIN_ST != 'AK' )
-
-adm_offices <- sf::read_sf('data/BLM_National_Administrative_Units/admu.gdb/', 
-                           layer = 'blm_natl_admu_field_poly_webpub') %>%
-  filter( ADMIN_ST != 'AK')  
 
 # Add Las Cruces District/Office: missing from field office Layer
 # but is present in District layer 
@@ -83,6 +83,12 @@ allotment_info <-
                                            'ORB00000' = 'ORB05000', 
                                            'UTP00000' = 'UTP02000')))
 
+
+# A few allotments in CO, Tres Rios Field office are missing ADM_UNIT_CD
+allotment_info <- 
+  allotment_info %>%
+  mutate( ADM_UNIT_CD = ifelse( uname %in% c(1482:1485), 'COS01000', ADM_UNIT_CD ))
+
 stopifnot( all( !is.na( allotment_info$ADM_OFC_CD ) ))
 stopifnot( all( str_length(allotment_info$ADM_UNIT_CD) == 8 ))
 
@@ -94,7 +100,10 @@ adm_unit_cd_field_poly <-
   st_drop_geometry( ) %>% 
   pull(ADM_UNIT_CD ) %>% unique()
 
-adm_unit_cd[ !adm_unit_cd %in% adm_unit_cd_field_poly ] %>% sort 
+stopifnot(
+  adm_unit_cd[ !adm_unit_cd %in% adm_unit_cd_field_poly ]  %>% nrow() == 0 )
+
+# some field office codes may not have allotments 
 adm_unit_cd_field_poly [ !adm_unit_cd_field_poly %in% adm_unit_cd] %>% sort
 
 #
@@ -103,7 +112,7 @@ admin_office_info <-
 
 allotment_info <- 
   allotment_info %>% 
-  select( uname, ALLOT_NO, ALLOT_NAME, LAST_DATE, area, acres, ADM_UNIT_CD, ADMIN_ST, lat, lon ) %>% 
+  select( uname, ALLOT_NO, ALLOT_NAME, LAST_DATE, area, hectares, ADM_UNIT_CD, ADMIN_ST, lat, lon ) %>% 
   left_join(admin_office_info, by = 'ADM_UNIT_CD') 
 
 # check for duplicates 
@@ -118,7 +127,6 @@ allotment_info %>%
   filter( is.na( ADMU_NAME))
 
 # Fix North Dakota and South Dakota field office allotments: 
-
 allotment_info %>% 
   filter( ADMIN_ST == 'MT') %>% 
   group_by(ADMIN_ST, ADMU_NAME  ) %>%
@@ -149,7 +157,6 @@ allotment_info <-
   mutate( ADMU_NAME = ifelse( ADMU_NAME == 'SOUTH DAKOTA FIELD OFFICE' & lat >= 46.3, 
                               'NORTH DAKOTA FIELD OFFICE', ADMU_NAME)) 
 #  ------------------------- # 
-
 allotment_info %>% 
   filter( ADMIN_ST == "MT", 
           ADMU_NAME %in% c( 'SOUTH DAKOTA FIELD OFFICE', 'NORTH DAKOTA FIELD OFFICE')) %>% 
