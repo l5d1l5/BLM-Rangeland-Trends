@@ -9,13 +9,12 @@ source('code/analysis/functions.R')
 source('code/analysis/parameters.R')
 
 # input -------------------------- # 
-allotment_centers <- readRDS(file = 'data/temp/BLM_allotments_sf.rds') %>%
-  ungroup() %>%
-  st_centroid() %>%
+allotment_centers <- read_sf('data/temp/BLM_allotments_cleaned/allotments.shp') %>%
+  st_centroid() %>% 
   select( uname ) 
 
 state_bounds <- tigris::states(resolution = '20m')
-ER <- read_sf('data/us_eco_l3_state_boundaries/us_eco_l3_state_boundaries.shp')
+ER <- read_sf('data/spatial/us_eco_l3_state_boundaries/us_eco_l3_state_boundaries.shp')
 #--------------------------------- # 
 
 # add ecogroup column to allotment table: 
@@ -111,11 +110,11 @@ allotment_ecogroups %>%
   write_csv('output/tables/ecogroup_allotment_dist.csv')
 
 # now add ecogroup information to the allotments table 
-read_rds('data/temp/allotment_info.rds') %>%
+read_csv('data/temp/allotment_info.csv') %>%
   select( - starts_with('ecogroup')) %>% # remove old ecogroups 
   left_join(allotment_ecogroups %>% 
               select( uname, ecogroup ), by  = 'uname') %>% 
-  write_rds('data/temp/allotment_info.rds') # write back out
+  write_csv('data/temp/allotment_info.csv') # write back out
 
 
 # Save ecogroup shapefile 

@@ -8,7 +8,7 @@ m2_per_ACRE <- 4046.8564224
 m2_per_ha <- 1e4
 ACRE_per_ha <- 2.47105
 
-BLM <- sf::read_sf('data/BLM_National_Grazing_Allotments/gra.gdb/', 
+BLM <- sf::read_sf('data/spatial/BLM_National_Grazing_Allotments/gra.gdb/', 
                    layer = 'gra_allot_poly')
 
 n_original <- nrow(BLM)
@@ -86,9 +86,9 @@ BLM %>%
 # Read in BLM districts and populate missing allotment ADMIN_ST field 
 # with ADMIN_ST from BLM district shapefile 
 # Spatial Join allotment centers within admin_dist
-st_layers('data/BLM_National_Administrative_Units/admu.gdb/' )
+st_layers('data/spatial/BLM_National_Administrative_Units/admu.gdb/' )
 
-districts <- st_read( 'data/BLM_National_Administrative_Units/admu.gdb/', 
+districts <- st_read( 'data/spatial/BLM_National_Administrative_Units/admu.gdb/', 
          layer = 'blm_natl_admu_dist_poly_webpub')
 
 districts <- districts %>% st_transform(crs = 'epsg:5070') 
@@ -151,11 +151,10 @@ BLM %>%
 
 
 # create if don't exit 
-dir.create('data/temp')
 dir.create('data/temp/BLM_allotments_cleaned')
 
 BLM %>% st_write(dsn = 'data/temp/BLM_allotments_cleaned/allotments.shp', 
                               layer = 'allotments', append = F)
 
-BLM %>% saveRDS(file = 'data/temp/BLM_allotments_sf.rds')
+#BLM %>% saveRDS(file = 'data/temp/BLM_allotments_sf.rds')
 

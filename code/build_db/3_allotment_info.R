@@ -3,6 +3,12 @@ rm(list = ls() )
 library(tidyverse)
 library(sf)
 
+if(!file.exists('data/RAP_EE_exports/ownership_area_by_allotment.csv')){ 
+  print( "Ownership data missing. \n
+  Complete Ownership Analysis in GEE first!")
+}
+
+
 climate_regions <- list(
   NW = c('OR', 'WA', 'ID'), 
   NR = c('MT', 'WY'), 
@@ -13,7 +19,7 @@ climate_regions <- stack(climate_regions ) %>%
   rename( 'climate_region' = ind, 'admin_st' = values  )
 
 allotment_info <- 
-  readRDS(file = 'data/temp/allotment_info.rds') %>% 
+  read_csv(file = 'data/temp/allotment_info.csv') %>% 
   mutate( hectares = as.numeric(hectares))
 
 allotment_ownership <- 
@@ -50,5 +56,5 @@ allotment_info <-
 
 
 allotment_info %>% 
-  write_rds('data/temp/allotment_info.rds')
+  write_csv('data/temp/allotment_info.csv')
 

@@ -4,21 +4,20 @@ library(tidyverse)
 library(sf)
 
 # Run "1_clean_allotment_shapes" first 
-adm_districts <- sf::read_sf('data/BLM_National_Administrative_Units/admu.gdb/', 
+adm_districts <- sf::read_sf('data/spatial/BLM_National_Administrative_Units/admu.gdb/', 
                            layer = 'blm_natl_admu_dist_poly_webpub') %>% 
   filter( ADMIN_ST != 'AK' )
 
-adm_offices <- sf::read_sf('data/BLM_National_Administrative_Units/admu.gdb/', 
+adm_offices <- sf::read_sf('data/spatial/BLM_National_Administrative_Units/admu.gdb/', 
                            layer = 'blm_natl_admu_field_poly_webpub') %>%
   filter( ADMIN_ST != 'AK')  
 
 # Get centroids for spatial joins later 
-allotment_info <- readRDS(file = 'data/temp/BLM_allotments_sf.rds') %>%
-  ungroup() %>%
-  st_centroid() %>%
-  st_transform( "epsg:4326") %>%
+allotment_info <- sf::read_sf('data/temp/BLM_allotments_cleaned/allotments.shp') %>% 
+  st_centroid() %>% 
+  st_transform(crs = "epsg:4326") %>% 
   mutate( 
-    xy = st_coordinates(SHAPE)) %>% 
+    xy = st_coordinates(geometry)) %>% 
   st_drop_geometry()  %>% 
   mutate( lon = xy[,1], lat = xy[,2]) %>% 
   select( - xy )
@@ -185,7 +184,7 @@ allotment_info %>%
 names( allotment_info ) <- str_to_lower(str_trim(str_squish(names(allotment_info))))
 
 allotment_info %>% 
-  write_rds( file = 'data/temp/allotment_info.rds')
+  write_csv( file = 'data/temp/allotment_info.csv')
 
 #
 adm_offices %>% 
