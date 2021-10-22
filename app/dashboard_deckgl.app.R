@@ -6,22 +6,24 @@ library(sf)
 library(shiny)
 library(plotly)
 library(shinydashboard)
-
+library(deckgl)
 ##############
 ##############
 
 load('data/mapdata.rda')
 load('data/vegdata.rda')
+load('data/layer_data.rda')
+
 source('functions.R')
 source('parameters.R')
+#source('app/deckgl_map.R')
 
 header <- dashboardHeader(title = 'BLM Allotments')
 sidebar <- dashboardSidebar()
-
 body <- dashboardBody(# Boxes need to be put in a row (or column)
   fluidRow(column(width = 7,
                   wellPanel(
-                    leafletOutput("map",  width = "100%", height = "551px")
+                    deckglOutput("rdeck",  width = "100%", height = "551px")
                   ))
            ,
            column(
@@ -60,36 +62,39 @@ ui <- dashboardPage(
   body)
 
 server <- function(input, output) {
-
-  output$map <- renderLeaflet({
+  
+  output$rdeck <- renderDeckgl({
     
     choices <- c(unit = input$unit, 
-                 type = input$type)
-
-    allotment_map(allotment_ctrs, allotment_shps, choices)
+                 type = input$type, 
+                 scale = input$scale)
+    
+    base_deck %>% 
+      add_trend_layer(shps = allotment_shps, choices)
     
   })
   
-
+  observeEvent(input$deck_onclick, {
+    info <- input$deck_onclick
+    object <- info$object
+    # print(info)
+    print(object$points %>% length())
+    print(names(object))
+  })
+  
+  
+  id <-  eventReactive(input$deck_onclick, {
+    
+    print(  input$deck_onclick$uname )
+    
+  })
+  
+  
   last_year <- max(veg$year)
   first_year <- min(veg$year)
   x_range <- c(first_year, last_year + 1 )
   
   # Community Plot
-  scale <- eventReactive(input$scale, { 
-    
-   input$scale 
-    
-  })
-  
-
-  
-    
-  id <-  eventReactive(input$map_shape_click, {
-    input$map_shape_click$id
-  })
-  
-  
   output$timeseries <- renderPlotly({
     
     if( !is.null(id()) ){
@@ -97,7 +102,7 @@ server <- function(input, output) {
       choices <- c(uname = id(), 
                    unit = input$unit, 
                    type = input$type, 
-                   scale = scale())
+                   scale = input$scale)
       
       temp_data <- format_ts_data(allotment_ctrs, 
                                   veg, 

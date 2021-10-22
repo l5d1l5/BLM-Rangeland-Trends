@@ -18,6 +18,7 @@ library(htmlwidgets)
 ##############
 
 load('data/mapdata.rda') 
+
 #load('app/data/mapdata.rda')
 ##############
 ##############

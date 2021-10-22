@@ -6,19 +6,22 @@ library(sf)
 veg <- read_csv(file = 'output/export_data/annual_veg_data.csv')
 load('app/data/mapdata.rda')
 
-allotments <- map_data %>% sf::st_drop_geometry() 
+allotments <- allotment_ctrs %>% sf::st_drop_geometry() 
 
 last_year <- max(veg$year)
 first_year <- min(veg$year)
 
-veg <- veg %>% 
+veg <- 
+  veg %>% 
+  filter( type != 'LTR') %>% 
+  filter( type != 'herbaceousAGB') %>% 
   mutate( unit = NA) %>% 
   mutate( unit = ifelse(str_detect(type, 'AGB$'), 'production', unit )) %>% 
   mutate( unit = ifelse( is.na(unit), 'cover', unit )) %>% 
   mutate( type_label = factor( type )) %>% 
   mutate( type_label = factor( type_label, 
-          labels = c('Annual', 'Annual', 'Bare Ground', 'Herbaceous', 
-                     'Litter', 'Perennial', 'Perennial', 'Shrub', 'Tree'))) 
+          labels = c('Annual', 'Annual', 'Bare Ground', 
+                     'Perennial', 'Perennial', 'Shrub', 'Tree'))) 
 
 ecoregion_veg <- veg %>% 
   left_join(allotments, by = 'uname') %>% 
