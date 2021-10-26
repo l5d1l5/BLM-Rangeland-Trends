@@ -3,12 +3,14 @@ library(tidyverse)
 
 source('code/analysis/functions.R')
 source('code/analysis/parameters.R')
+allotments <- read_csv('data/temp/allotment_info.csv')
 
-allotments <- read_rds('data/temp/allotment_info.rds') %>% 
+allotments <- read_csv('data/temp/allotment_info.csv') %>% 
   select( uname, allot_name, admin_st, 
           parent_cd, parent_name, admu_name, 
           ecogroup, hectares, area, climate_region, 
-        Other, Private, BLM, elevation ) %>% 
+        Other, Private, BLM, elevation.x ) %>%
+  rename( elevation = elevation.x ) %>%
   mutate( district_label = str_remove( parent_name, ' District.*$')) %>% 
   mutate( 
     office_label = str_remove_all(str_squish(str_trim (admu_name) ), 

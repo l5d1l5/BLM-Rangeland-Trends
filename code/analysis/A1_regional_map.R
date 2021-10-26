@@ -1,4 +1,3 @@
-# load files into Postgres database 
 rm(list = ls() )
 library(tidyverse)
 library(sf)
@@ -6,7 +5,7 @@ library(sf)
 source('code/analysis/functions.R')
 source('code/analysis/parameters.R')
 
-allotment_info <- read_rds('data/temp/allotment_info.rds') %>% 
+allotment_info <- read_csv('data/temp/allotment_info.csv') %>% 
   filter( ecogroup != 'Marine West Coast Forest')
 
 BLM_districts <- read_rds('data/temp/cleaned_BLM_district_shapes.rds')
@@ -14,22 +13,38 @@ BLM_offices <- read_rds('data/temp/cleaned_BLM_field_office_shapes.rds')
 ecogroups <- read_rds('data/temp/simplified_ecogroup_shapefile.rds') %>% 
   filter( ecogroup != 'Marine West Coast Forest') 
 state_layer <- read_rds('data/temp/western_states_outlines_shapefile.rds')  
-allotment_shapes <- read_rds('data/temp/BLM_allotments_sf.rds')
+allotment_shapes <- sf::read_sf('data/temp/BLM_allotments_cleaned/allotments.shp')
 
 allotment_shapes <- 
   allotment_shapes %>% 
   select(uname) %>%
   left_join(allotment_info %>% select(uname, ecogroup), by = 'uname') %>% 
   filter( !is.na(ecogroup)) %>% 
-  mutate( SHAPE = st_buffer(SHAPE, 200)) %>% 
+  mutate( geometry = st_buffer(geometry, 200)) %>% 
   st_simplify(dTolerance = 200) %>%
   st_make_valid()
 
 allotment_shapes_ecogroup <- 
   allotment_shapes %>% 
   group_by( ecogroup ) %>% 
-  summarise( SHAPE = st_union( SHAPE)) %>% 
+  summarise( geometry = st_union( geometry)) %>% 
   st_make_valid()
+
+allotment_shapes_ecogroup <- allotment_shapes_ecogroup %>%
+  mutate(ecogroup = factor(ecogroup)) %>%
+  mutate(ecogroup = factor(
+    ecogroup,
+    labels = c(
+      'AZ/NM Highlands',
+      'East Cold Deserts',
+      'Forested Mountains',
+      'Mediterranean California',
+      'North Great Plains',
+      'South Great Plains',
+      'West Cold Deserts',
+      'Warm Deserts'
+    )
+  ))
 
 # save out for other use 
 #write_rds( allotment_shapes_ecogroup, file = 'data/temp/allotments_by_ecogroup_for_mapping.RDS' )
@@ -54,6 +69,17 @@ state_layer <- state_layer %>%
   st_simplify(dTolerance = 1000) %>%
   st_make_valid()
 
+names( ecogroup_colors)[ order(names( ecogroup_colors)) ]  <- 
+  c(
+    'AZ/NM Highlands',
+    'East Cold Deserts',
+    'Forested Mountains',
+    'Mediterranean California',
+    'North Great Plains',
+    'South Great Plains',
+    'West Cold Deserts',
+    'Warm Deserts'
+    )
 
 regional_map <- 
   state_layer %>% 
@@ -61,10 +87,10 @@ regional_map <-
     geom_sf( fill = 'white', size = 0.8) + 
     geom_sf( data = allotment_shapes_ecogroup, aes( fill = ecogroup), 
              alpha = 0.9, color= NA) + 
-    scale_fill_manual( name = 'Ecogroup', values = ecogroup_colors) + 
+    scale_fill_manual( name = 'Ecoregion', values = ecogroup_colors) + 
     # geom_sf( data= allotment_shapes_ecogroup, aes( fill = ecogroup), size = 0.1,
     #         fill = NA, alpha = 0.9) +
-    scale_color_manual(name = 'Ecogroup', values = ecogroup_colors) + 
+    scale_color_manual(name = 'Ecoregion', values = ecogroup_colors) + 
     #geom_sf(data = BLM_districts, fill = NA, color = NA) + 
     geom_sf(data = BLM_offices %>% distinct(Shape), 
             fill = NA, size = 0.1, alpha = 0.5) + 

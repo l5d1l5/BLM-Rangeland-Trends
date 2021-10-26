@@ -30,11 +30,8 @@ trend_formula2 <- formula(value2 ~ year2 +
 m_afgc <- lmer(data = AFGC, 
                trend_formula, control = control_lmer)
 
-m_afgc2 <- lmer(data = AFGC, 
-               trend_formula2, control = control_lmer)
 
 summary(m_afgc)
-summary(m_afgc2)
 
 ecogroup_effects <- get_ecogroup_trends( m_afgc) 
 random_effects <- get_blm_random_effects( m_afgc)
@@ -120,13 +117,13 @@ pfg_trends <- blm_trend_summary( pfgAGB, pfg_fixed, pfg_random)
 
 
 # Herbaceous: AFG + PFG = Total Herbaceous 
-m_herb_agb <- lmer(data = herbaceousAGB, 
-                   trend_formula, 
-                   control = control_lmer)
-
-herb_fixed <- get_ecogroup_trends(m_herb_agb)
-herb_random <- get_blm_random_effects(m_herb_agb)
-herb_trends <- blm_trend_summary(herb_agb, herb_fixed, herb_random)
+# m_herb_agb <- lmer(data = herbaceousAGB, 
+#                    trend_formula, 
+#                    control = control_lmer)
+# 
+# herb_fixed <- get_ecogroup_trends(m_herb_agb)
+# herb_random <- get_blm_random_effects(m_herb_agb)
+# herb_trends <- blm_trend_summary(herb_agb, herb_fixed, herb_random)
 
 
 # Check convergence with different methods, could take a while ---------------------------- # 
@@ -143,11 +140,11 @@ herb_trends <- blm_trend_summary(herb_agb, herb_fixed, herb_random)
 
 saveRDS(m_afg_agb, file = 'output/AFG_agb_trend_model.rds')
 saveRDS(m_pfg_agb, file = 'output/PFG_agb_trend_model.rds')
-saveRDS(m_herb_agb, file = 'output/HERB_agb_trend_model.rds')
+# saveRDS(m_herb_agb, file = 'output/HERB_agb_trend_model.rds')
 
 write_csv(afg_trends, file = 'output/AFG_agb_group_trends.csv')
 write_csv(pfg_trends, file = 'output/PFG_agb_group_trends.csv')
-write_csv(herb_trends, file = 'output/HERB_agb_group_trends.csv')
+# write_csv(herb_trends, file = 'output/HERB_agb_group_trends.csv')
 
 detach(agb)
-rm( agb, m_afg_agb, m_pfg_agb, m_herb_agb)
+rm( agb, m_afg_agb, m_pfg_agb)

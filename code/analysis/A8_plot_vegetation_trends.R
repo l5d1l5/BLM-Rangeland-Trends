@@ -6,6 +6,8 @@ library(gridExtra)
 library(ggpubr)
 require(kableExtra)
 
+unloadNamespace(ns = 'papeR') 
+
 source('code/analysis/functions.R')
 source('code/analysis/parameters.R')
 
@@ -20,7 +22,7 @@ types  <- c(str_extract(cover_model_files, pattern = '[A-Z]+'))
 
 types <-
   factor(types,
-         labels = c('Annual', 'Bare', 'Total', 'Perennial', 'Shrub', 'Tree'))
+         labels = c('Annual', 'Bare', 'Perennial', 'Shrub', 'Tree'))
 
 names(cover_models) <- types
 
@@ -37,11 +39,8 @@ trend_table_cover <- do.call(rbind, trend_table_cover)
 # Drop Total Herb Cover Type
 trend_table_cover <-
   trend_table_cover %>%
-  filter(type != 'Total') %>%
   mutate(type = factor(type))
 
-cover_models <-
-  cover_models[-which(names(cover_models) == 'Total')]
 #
 cover_attribs <- lapply(cover_models,
                         function(x) {
@@ -83,7 +82,7 @@ trend_table_cover <- trend_table_cover %>%
 
 trend_table_cover$unit <- 'Cover'
 
-# Biomass Models and Trends--------------------------- #
+# Production Models and Trends--------------------------- #
 agb_model_files <-
   dir(path = 'output',
       pattern = '.*_agb_trend_model.rds',
@@ -94,7 +93,7 @@ agb_models <- lapply(agb_model_files, read_rds)
 types  <-
   c(str_extract(basename(agb_model_files), pattern = '[A-Z]+'))
 
-types <- factor(types, labels = c('Annual', 'Total', 'Perennial'))
+types <- factor(types, labels = c('Annual', 'Perennial'))
 
 trend_table <-
   mapply(
@@ -113,6 +112,7 @@ response_attributes <-
   lapply(agb_models, function(x)
     attributes(x@frame$value2))
 
+
 year2_attributes <-
   lapply(agb_models, function(x)
     attributes(x@frame$year2))
@@ -120,16 +120,14 @@ year2_attributes <-
 
 trend_table_agb <- trend_table %>%
   left_join(data.frame(
-    type = c('Annual', 'Total', 'Perennial'),
+    type = c('Annual', 'Perennial'),
     scale = c(
       response_attributes[[1]]$`scaled:scale`,
-      response_attributes[[2]]$`scaled:scale`,
-      response_attributes[[3]]$`scaled:scale`
+      response_attributes[[2]]$`scaled:scale`
     ),
     year2_scale = c(
       year2_attributes[[1]]$`scaled:scale`,
-      year2_attributes[[2]]$`scaled:scale`,
-      year2_attributes[[3]]$`scaled:scale`
+      year2_attributes[[2]]$`scaled:scale`
     )
   ),
   by = 'type') %>%
@@ -141,17 +139,15 @@ trend_table_agb <- trend_table %>%
   mutate( ecogroup = factor(ecogroup)) %>%
   mutate(ecogroup = factor(ecogroup, labels = ecogroup_labels))
 
+trend_table_agb$unit <- 'Production'
 
-trend_table_agb$unit <- 'Biomass'
-
-# Plot Cover and Biomass Trends together
+# Plot Cover and Production Trends together
 trend_table <-
   trend_table_cover %>%
   bind_rows(trend_table_agb) %>%
-  filter(type != 'Total') %>%
   mutate(unit = factor(
     unit,
-    levels = c('Cover', 'Biomass'),
+    levels = c('Cover', 'Production'),
     ordered = T
   )) %>%
   mutate(type = factor(
@@ -184,7 +180,7 @@ trend_table %>%
 #   mutate( type = factor(type, levels =c('Tree', 'Shrub', 'Perennial', 'Bare', 'Annual'), ordered = T)) %>%
 #   bind_rows( (trend_table %>% mutate(unit = as.character(unit)))) %>%
 #   filter( type != 'Total') %>%
-#   mutate( unit = factor( unit, levels = c('Cover', 'Biomass'), ordered = T)) %>%
+#   mutate( unit = factor( unit, levels = c('Cover', 'Production'), ordered = T)) %>%
 #   plot_trend_coefficients(my_colors = my_colors ) +
 #   facet_grid( unit ~ ecogroup, scales = 'free_y' ) +
 #   scale_y_continuous(name = 'Trend Slope') +
@@ -453,7 +449,7 @@ observations %>%
 # Plot AGB over time ----------------------------------------------------- #
 temp <- mapply(
   x = agb_models,
-  y = c('Annual', 'Herb', 'Perennial'),
+  y = c('Annual', 'Perennial'),
   FUN = function(x, y, ...)
     get_plotting_data(x, y, quantile_ribbon = T, ...),
   SIMPLIFY = F
@@ -474,7 +470,7 @@ predictions$ecogroup <-
 
 preds <- predictions %>%
   left_join(trend_table %>%
-              filter(unit == 'Biomass', sig == "*"),
+              filter(unit == 'Production', sig == "*"),
             by = c('ecogroup', 'type')) %>%
   filter(!is.na(sig))
 
@@ -514,7 +510,7 @@ observations %>%
 # Alternate production series using "dots" --------------------------------- #
 temp <- mapply(
   x = agb_models,
-  y = c('Annual', 'Herb', 'Perennial'),
+  y = c('Annual', 'Perennial'),
   FUN = function(x, y, ...)
     get_plotting_data(x, y, quantile_ribbon = F, ...),
   size = 10,
@@ -536,7 +532,7 @@ predictions$ecogroup <-
 
 preds <- predictions %>%
   left_join(trend_table %>%
-              filter(unit == 'Biomass', sig == "*"),
+              filter(unit == 'Production', sig == "*"),
             by = c('ecogroup', 'type')) %>%
   filter(!is.na(sig))
 

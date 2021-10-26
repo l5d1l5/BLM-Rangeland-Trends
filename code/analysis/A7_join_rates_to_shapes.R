@@ -11,7 +11,7 @@ source('code/analysis/parameters.R')
 cover_model_files <- dir(path = 'output', pattern = '.*_cover_trend_model.rds', full.names = T)
 cover_models <- lapply(cover_model_files, read_rds)
 types  <- c( str_extract( cover_model_files, pattern = '[A-Z]+') )
-types <- factor(types, labels = c('Annual', 'Bare', 'Total', 'Perennial', 'Shrub', 'Tree'))
+types <- factor(types, labels = c('Annual', 'Bare', 'Perennial', 'Shrub', 'Tree'))
 names( cover_models ) <- types 
 
 cover_att <- lapply( cover_models, function(x) attributes( x@frame$value2) )
@@ -49,7 +49,6 @@ trend_scales <-
 cover_trend_scales <- trend_scales
 
 # Predict and get rates 
-
 pred_grid <- lapply( types , function( x ) { 
   m <- cover_models[[x]]
   m@frame %>% 
@@ -58,13 +57,15 @@ pred_grid <- lapply( types , function( x ) {
     arrange(uname, year2) %>% 
     mutate( yhat = predict( m , newdata = . )) %>% 
     group_by( type, uname ) %>% 
-    summarise( rate = (yhat[which.max(year2)] - yhat[which.min(year2)])/(max(year2) - min(year2)))
+    dplyr::summarise( rate = (yhat[which.max(year2)] - yhat[which.min(year2)])/(max(year2) - min(year2)))
   })
 
+
 trends <- do.call(rbind, pred_grid) %>% 
+  ungroup() %>%
   left_join(trend_scales, by = 'type') %>% 
   mutate( bt_trend = rate*trend_unit ) %>% 
-  select( uname, rate, bt_trend )
+  select(type, uname, rate, bt_trend )
 
 # Sanity check on back transformation 
 # rf <- ranef( cover_models$Annual )
@@ -129,29 +130,29 @@ trends <- do.call(rbind, pred_grid) %>%
 
 # 
 
-allotment_shp <- read_rds('data/temp/BLM_allotments_sf.rds')
+allotment_shp <- sf::read_sf('data/temp/BLM_allotments_cleaned/allotments.shp')
 
 allotment_rates <- allotment_shp %>% 
   left_join(
   trends %>%
     ungroup() %>%
     select( - rate ) %>%
-    filter(type != 'Total') %>% 
-    mutate( type = factor(type)) %>% 
-    mutate( type = factor( type, labels = c('AFG', 'BG', 'PFG', 'SHR', 'TREE'))) %>% 
     pivot_wider( names_from = type, values_from = bt_trend )
 ) 
 
+
 dir.create('data/temp/veg_rates')
-allotment_rates %>% st_write(dsn = 'data/temp/veg_rates/allotments_with_rates.shp', 
-                 layer = 'allotments', append = F)
+allotment_rates %>% 
+  st_write(dsn = 'data/temp/veg_rates/allotments_with_rates.shp', 
+            layer = 'allotments', 
+            append = F)
 
 # Do the same for production trends
 # ------------------------------------------------ # 
 agb_model_files <- dir(path = 'output', pattern = '.*_agb_trend_model.rds', full.names = T)
 agb_models <- lapply(agb_model_files, read_rds)
 types  <- c( str_extract( agb_model_files, pattern = '[A-Z]+') )
-types <- factor(types, labels = c('Annual', 'Total', 'Perennial'))
+types <- factor(types, labels = c('Annual', 'Perennial'))
 names( agb_models ) <- types 
 
 agb_att <- lapply( agb_models, function(x) attributes( x@frame$value2) )
@@ -201,30 +202,31 @@ pred_grid <- lapply( types , function( x ) {
     arrange(uname, year2) %>% 
     mutate( yhat = predict( m , newdata = . )) %>% 
     group_by( type, uname ) %>% 
-    summarise( rate = (yhat[which.max(year2)] - yhat[which.min(year2)])/(max(year2) - min(year2)))
+    dplyr::summarise( rate = (yhat[which.max(year2)] - yhat[which.min(year2)])/(max(year2) - min(year2)))
 })
+
 
 trends <- do.call(rbind, pred_grid) %>% 
   left_join(trend_scales, by = 'type') %>% 
   mutate( bt_trend = rate*trend_unit ) %>% 
   select( uname, rate, bt_trend )
 
-allotment_shp <- read_rds('data/temp/BLM_allotments_sf.rds')
+allotment_shp <- sf::read_sf('data/temp/BLM_allotments_cleaned/allotments.shp')
 
 allotment_rates <- allotment_shp %>% 
   left_join(
     trends %>%
       ungroup() %>%
       select( - rate ) %>%
-      filter(type != 'Total') %>% 
       mutate( type = factor(type)) %>% 
       mutate( type = factor( type, labels = c('AFG', 'PFG'))) %>% 
       pivot_wider( names_from = type, values_from = bt_trend )
   ) 
 
 dir.create('data/temp/agb_rates')
-allotment_rates %>% st_write(dsn = 'data/temp/agb_rates/allotments_with_rates.shp', 
-                             layer = 'allotments', append = F)
+allotment_rates %>% 
+  st_write(dsn = 'data/temp/agb_rates/allotments_with_rates.shp', 
+           layer = 'allotments', append = F)
  
 
 # Sanity Check on AGB Rates -------------- # 
