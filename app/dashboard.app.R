@@ -61,34 +61,36 @@ ui <- dashboardPage(
 
 server <- function(input, output) {
 
-  output$map <- renderLeaflet({
-    
-    choices <- c(unit = input$unit, 
-                 type = input$type)
-
-    allotment_map(allotment_ctrs, allotment_shps, choices)
-    
-  })
-  
-
   last_year <- max(veg$year)
   first_year <- min(veg$year)
   x_range <- c(first_year, last_year + 1 )
   
   # Community Plot
   scale <- eventReactive(input$scale, { 
-    
    input$scale 
-    
+  })
+  
+  type <- eventReactive(input$type, { 
+    input$type 
+  })
+  
+  unit <- eventReactive(input$unit, { 
+    input$unit 
   })
   
 
-  
-    
   id <-  eventReactive(input$map_shape_click, {
     input$map_shape_click$id
   })
   
+  output$map <- renderLeaflet({
+    
+    choices <- c(unit = input$unit, 
+                 type = input$type)
+    
+    allotment_map(allotment_ctrs, allotment_shps, choices)
+    
+  })
   
   output$timeseries <- renderPlotly({
     
