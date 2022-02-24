@@ -14,46 +14,39 @@ load('data/analysis_data/allotments.rda')
 
 # Pixel level variance and means per allotment 
 
-pixel_cover_trends <- read_csv('data/RAP_EE_exports/afg_resid_samples.csv') %>% 
-  bind_cols( read_csv('data/RAP_EE_exports/bg_resid_samples.csv')) %>% 
-  bind_cols( read_csv('data/RAP_EE_exports/pfg_resid_samples.csv')) %>% 
-  bind_cols( read_csv('data/RAP_EE_exports/shr_resid_samples.csv')) %>%
-  bind_cols( read_csv('data/RAP_EE_exports/tree_resid_samples.csv'))  %>% 
-  select( AFG, BG, PFG, SHR, TREE)
+pixel_cover_trends <- read_csv('data/RAP_EE_exports/allotment_cover_trends.csv')
+pixel_prod_trends <- read_csv('data/RAP_EE_exports/allotment_production_trends.csv')
 
-pixel_prod_trends <- read_csv('data/RAP_EE_exports/afg_prod_resid_samples.csv') %>% 
-  bind_cols( read_csv('data/RAP_EE_exports/pfg_prod_resid_samples.csv')) %>% 
-  select( AFG, PFG) 
 
-pixel_cover_trends %>% 
-  mutate( grp = 'pixel', var1 = 'year2', unit  = 'Cover') %>% 
-  pivot_longer(AFG:TREE, names_to = 'type', values_to = 'resid') %>% 
-  bind_rows( pixel_prod_trends %>% 
-               mutate( grp = 'pixel', var1 = 'year2', unit = 'Production') %>% 
-               pivot_longer(AFG:PFG, names_to = 'type', values_to = 'resid')) %>% 
-  write_rds('data/temp/pixel_residual_trends.rds')
-
-pixel_cover_trends <- 
-  pixel_cover_trends %>% 
-  summarise_all( .funs = list( sd)) %>% 
-  pivot_longer(names_to = 'type', values_to = 'sd', AFG:TREE) %>%
-  mutate( grp = "pixel",
-          var1 = "year2", 
-          unit = "Cover")
-
-pixel_prod_trends <- 
-  pixel_prod_trends %>% 
-  summarise_all( .funs = list( sd)) %>% 
-  pivot_longer(names_to = 'type', values_to = 'sd', AFG:PFG) %>%
-  mutate( grp = "pixel",
-          var1 = "year2", 
-          unit = "Production")
+pixel_stdDev <- pixel_cover_trends %>% 
+  select(contains('std'), 'uname') %>% 
+  pivot_longer(cols = contains('std'), names_to = 'type', values_to = 'stdDev') %>% 
+  mutate(var = stdDev^2) %>% 
+  group_by( type ) %>% 
+  summarise( var = mean(var, na.rm = T)) %>% 
+  mutate( stdDev = sqrt(var)) %>% 
+  bind_rows(
+    pixel_prod_trends %>% 
+      select(contains('std'), 'uname') %>% 
+      pivot_longer(cols = contains('std'), names_to = 'type', values_to = 'stdDev') %>% 
+      mutate(var = stdDev^2) %>% 
+      group_by( type ) %>% 
+      summarise( var = mean(var, na.rm = T)) %>% 
+      mutate( stdDev = sqrt(var))
+  ) %>% 
+  mutate( type2 = c('Annual', 'Bare', 'Perennial', 'Shrub', 'Tree', 'Annual', 'Perennial')) %>% 
+  mutate( type = factor(type2)) %>%
+  mutate( unit = c('Cover', 'Cover', 'Cover', 'Cover', 'Cover', 'Production', 'Production')) %>% 
+  mutate( grp = 'Pixel') %>% 
+  select( type, grp, unit, var, stdDev) 
 
 # Variance partitioning -------------------------------- 
 cover_model_files <- dir(path = 'output', pattern = '.*_cover_trend_model.rds', full.names = T)
+cover_model_files <- cover_model_files[ !str_detect(cover_model_files, "WOODY") ] 
+
 cover_models <- lapply(cover_model_files, read_rds)
 types  <- c( str_extract( cover_model_files, pattern = '[A-Z]+') )
-types <- factor(types, labels = c('Annual', 'Bare', 'Total', 'Perennial', 'Shrub', 'Tree'))
+types <- factor(types, labels = names(my_colors))
 names( cover_models ) <- types 
 
 cover_att <- lapply( cover_models, function(x) attributes( x@frame$value2) )
@@ -72,7 +65,7 @@ cover_variance$unit <- 'Cover'
 agb_model_files <- dir(path = 'output', pattern = '.*_agb_trend_model.rds', full.names = T)
 agb_models <- lapply(agb_model_files, read_rds)
 types  <- c( str_extract( basename( agb_model_files), pattern = '[A-Z]+') )
-types <- factor(types, labels = c('Annual', 'Total', 'Perennial'))
+types <- factor(types, labels = c('Annual', 'Perennial'))
 names( agb_models ) <- types 
 vc_agb <- lapply(agb_models, VarCorr )
 vc_agb <- lapply( vc_agb, data.frame)
@@ -106,84 +99,46 @@ all_random_effects <- bind_rows(
 
 
 # Bind pixel-level variance ------------------------------------------ # 
-pixel_level_trends <- 
-  pixel_cover_trends %>% 
-    mutate( type = factor( type, labels = c('Annual', 'Bare', 'Perennial', 'Shrub', 'Tree'))) %>% 
-  bind_rows(
-    pixel_prod_trends %>% 
-              mutate( type = factor(type, labels = c('Annual', 'Perennial')))
-    )
+var_cols <- scales::hue_pal()(3)
 
-all_random_effects <- 
+
+final_variance_table <- 
   all_random_effects %>% 
-  select( grp, var1, type, unit, sd, variance ) %>% 
+  filter( var1 == 'year2') %>% 
+  select( type, unit, grp, var1, par, variance, sd ) %>% 
+  mutate( grp2 = factor(grp)) %>%
+  mutate( grp2 = factor(grp2, labels = c('Office', 'Allotment'))) %>% 
+  mutate( grp = grp2 ) %>% 
+  rename( var = variance, stdDev = sd) %>% 
+  select( type, grp, unit, var, stdDev ) %>% 
   bind_rows(
-    pixel_level_trends %>% 
-      ungroup() %>% 
-      select( grp, var1, type, unit, sd)
+    pixel_stdDev
   ) %>% 
-  mutate( Scale = factor( grp, levels = c('ecogroup:office_label', 'uname', 'pixel'), ordered = T)) %>% 
-  mutate( Scale = factor( Scale, labels = c('Office', 'Allotment', 'Pixel')))
+  mutate( type_unit = paste( type, unit, sep = ' ')) %>% 
+  mutate( isPix = ifelse(grp == 'Pixel', "A) Within Allotment/Pixel-scale", "B) Between Allotment (Random Effects)")) %>% 
+  mutate( isPix = factor( isPix , levels = c('A) Within Allotment/Pixel-scale', 'B) Between Allotment (Random Effects)'), ordered = T))
 
 
-
-all_random_effects %>% 
-  filter( type != 'Total', var1 == 'year2' ) %>% 
-  mutate( unit = ifelse( unit == 'Production', 'Prod.', unit )) %>% 
-  unite( 'type', c(type, unit ) , sep = '\n')  %>% 
-  ggplot( aes( fill = Scale, x = type, y = sd )) + 
-  geom_bar( stat = 'identity', position = position_dodge()) + 
+final_variance_table %>%
+  ggplot( aes( x = type_unit, y = var, fill = grp )) + 
+  geom_bar(stat = 'identity')   + 
+  facet_wrap( ~ isPix, ncol  = 2 ) + 
+  ylab( "Trend Variance") + 
   theme_bw() + 
-  scale_y_continuous(name = 'Std. Dev. of Residual Trends') + 
-  scale_fill_manual(values = error_scale_colors) +
-  theme(axis.title.x = element_blank()) + 
-  ggsave( filename = 'output/figures/Fig_5_trend_sd.png',
-          width = 6, height = 4, units = 'in', dpi = 300)
+  scale_fill_manual(values = var_cols, breaks = c('Allotment', 'Office'), name = 'Scale') + 
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_text( angle = -50, hjust = 0), 
+        strip.text = element_text(hjust = 0)) + 
+  ggsave( filename = 'output/figures/Fig_S4_trend_variance.png',
+          width = 6.5, height = 4, units = 'in', dpi = 600)
 
 
-all_random_effects %>% 
-  filter( type != 'Total', var1 == 'year2' ) %>% 
-  mutate( unit = ifelse( unit == 'Production', 'Prod.', unit ))  %>% 
-  select(  Scale, type, unit, sd) %>% 
-  pivot_wider(names_from = Scale, values_from = sd ) %>% 
-  mutate( pixel_factor = Pixel / Allotment )
-
-# Sanity check on transformation 
-test_rf <- ranef(cover_models$Annual)
-var( test_rf$uname$year2 )
-var( test_rf$`ecogroup:office_label`$year2 )
-
-uname_ranef <- VarCorr(cover_models$Annual)  %>% data.frame() %>% 
-  filter( grp == 'uname', var1 == 'year2') %>% 
-  pull( vcov)
-
-trend_unit <- trend_scales$trend_unit[ trend_scales$type == 'Annual' & trend_scales$unit == 'Cover' ] 
-pixel_level <- read_csv('data/RAP_EE_exports/afg_resid_samples.csv')
-sd(pixel_level$AFG)
-
-sqrt( var( test_rf$uname$year2*trend_unit) )
-sqrt( var(test_rf$uname$year2)*(trend_unit)^2 )
-sqrt( uname_ranef*(trend_unit^2))
+final_variance_table %>% 
+  group_by(type_unit) %>% 
+  arrange( var ) %>% 
+  mutate( order = row_number()) %>%
+  arrange( type_unit, order ) %>% 
+  select( type_unit, grp, order , var ) %>% View 
 
 
-all_random_effects %>% 
-  filter( type != 'Total', var1 == 'year2' ) %>% 
-  mutate( unit = ifelse( unit == 'Production', 'Prod.', unit )) %>% 
-  unite( 'type', c(type, unit ) , sep = '\n')  %>% 
-  arrange( Scale, type ) %>% 
-  filter( type == 'Annual\nCover')
-
-
-# Compare sd of ecogroup trends 
-lapply( cover_models, get_ecogroup_trends) %>% 
-  do.call(rbind , . ) %>% 
-  data.frame() %>%
-  mutate( type = row.names(.)) %>% 
-  pivot_longer(`AZ.NM.Highlands`:`Warm.Deserts`, 'ecogroup', 'value') %>%
-  mutate( unit = 'Cover') %>%
-  left_join(trend_scales, by  = c('type', 'unit')) %>% 
-  mutate( trend = value*trend_unit ) %>%
-  group_by( type, unit ) %>%
-  summarise( sd( trend))
-  
 

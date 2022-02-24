@@ -17,12 +17,13 @@ cover_model_files <-
       pattern = '.*_cover_trend_model.rds',
       full.names = T)
 
+# Drop Woody 
+cover_model_files <- cover_model_files[ !str_detect( cover_model_files, 'WOODY') ] 
 cover_models <- lapply(cover_model_files, read_rds)
 types  <- c(str_extract(cover_model_files, pattern = '[A-Z]+'))
 
 types <-
-  factor(types,
-         labels = c('Annual', 'Bare', 'Perennial', 'Shrub', 'Tree'))
+  factor(types, labels = names( my_colors))
 
 names(cover_models) <- types
 
@@ -34,6 +35,13 @@ trend_table_cover <- mapply(
   SIMPLIFY = F
 )
 
+# overall <- lapply( cover_models, emtrends, specs = ~ 1, var = 'year2')
+# 
+# overall <- do.call( rbind, lapply( overall , as.data.frame ))  %>% 
+#   rename(ecogroup = `1`) %>% 
+#   mutate( type = row.names(.)) 
+# 
+# trend_table_cover$overall <- overall
 trend_table_cover <- do.call(rbind, trend_table_cover)
 
 # Drop Total Herb Cover Type
@@ -51,6 +59,8 @@ year2_attributes <-
   lapply(cover_models, function(x)
     attributes(x@frame$year2))
 
+# ecogroup_labels <- c(ecogroup_labels, "Overall" )
+
 
 trend_table_cover <- trend_table_cover %>%
   mutate( ecogroup = factor(ecogroup)) %>% 
@@ -63,6 +73,7 @@ trend_table_cover <- trend_table_cover %>%
       cover_attribs[[3]]$`scaled:scale`,
       cover_attribs[[4]]$`scaled:scale`,
       cover_attribs[[5]]$`scaled:scale`
+      
     ),
     year2_scale = c(
       year2_attributes[[1]]$`scaled:scale`,
@@ -79,7 +90,6 @@ trend_table_cover <- trend_table_cover %>%
     asymp.UCL = asymp.UCL * scale / year2_scale
   )
 
-
 trend_table_cover$unit <- 'Cover'
 
 # Production Models and Trends--------------------------- #
@@ -93,7 +103,7 @@ agb_models <- lapply(agb_model_files, read_rds)
 types  <-
   c(str_extract(basename(agb_model_files), pattern = '[A-Z]+'))
 
-types <- factor(types, labels = c('Annual', 'Perennial'))
+types <- factor(types, labels = c('Annual', 'Herbaceous', 'Perennial'))
 
 trend_table <-
   mapply(
@@ -104,6 +114,13 @@ trend_table <-
     SIMPLIFY = F
   )
 
+# overall <- lapply( agb_models, emtrends, specs = ~ 1, var = 'year2')
+# names( overall ) <- types 
+# overall <- do.call( rbind, lapply( overall , as.data.frame ))  %>% 
+#   rename(ecogroup = `1`) %>% 
+#   mutate( type = row.names(.)) 
+
+# trend_table$overall <- overall
 trend_table <- do.call(rbind, trend_table)
 
 # Transform rate to get back to raw un-scaled proportion increase
@@ -112,11 +129,9 @@ response_attributes <-
   lapply(agb_models, function(x)
     attributes(x@frame$value2))
 
-
 year2_attributes <-
   lapply(agb_models, function(x)
     attributes(x@frame$year2))
-
 
 trend_table_agb <- trend_table %>%
   left_join(data.frame(
@@ -144,7 +159,7 @@ trend_table_agb$unit <- 'Production'
 # Plot Cover and Production Trends together
 trend_table <-
   trend_table_cover %>%
-  bind_rows(trend_table_agb) %>%
+  bind_rows(trend_table_agb %>% filter(type != "Herbaceous")) %>%
   mutate(unit = factor(
     unit,
     levels = c('Cover', 'Production'),
@@ -158,6 +173,7 @@ trend_table <-
   mutate(sig = ifelse((asymp.LCL > 0 | asymp.UCL < 0), "*", ''))
 
 # Plot -------------------------
+
 trend_table %>%
   plot_trend_coefficients_vertical(my_colors = my_colors) +
   facet_grid(ecogroup  ~ unit, switch = 'y', scales = 'free_x') +
@@ -170,7 +186,7 @@ trend_table %>%
   ggsave(
     filename = 'output/figures/Fig_4_veg_trends_by_Ecoregion.png',
     height = 8,
-    width = 8,
+    width = 7,
     units = 'in',
     dpi = 'print'
   )
@@ -501,7 +517,7 @@ observations %>%
   theme(legend.position = "none")  +
   ggsave(
     filename = 'output/figures/Fig_3_production_series_by_ecoregion.png',
-    height = 7,
+    height = 4,
     width = 10,
     units = 'in',
     dpi = 'print'
@@ -600,3 +616,4 @@ grid.arrange(
     width = 8,
     units = 'in'
   )
+

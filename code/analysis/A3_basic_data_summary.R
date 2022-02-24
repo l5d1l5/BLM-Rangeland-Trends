@@ -1,6 +1,8 @@
 rm(list = ls())
 
 library(tidyverse)
+unloadNamespace('raster')
+unloadNamespace('papeR')
 
 source('code/analysis/functions.R')
 source('code/analysis/parameters.R')

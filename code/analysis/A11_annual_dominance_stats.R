@@ -5,7 +5,7 @@ library(tidyverse)
 source('code/analysis/parameters.R')
 
 annual_data <- read_rds('data/temp/annual_data.rds')
-allotments <- read_rds('data/temp/allotment_info.rds')
+allotments <- read_csv('data/temp/allotment_info.csv')
 
 annual_data <- annual_data %>% 
   left_join(allotments, by = 'uname')
@@ -44,15 +44,20 @@ annual_prod_dominance %>%
 
 annual_prod_dominance %>% 
   filter( ecogroup != 'Marine West Coast Forest') %>% 
-  ggplot( aes( x = decade, y = frac_more_annuals )) + 
+  mutate( perc_more_annuals = frac_more_annuals*100) %>% 
+  mutate( 
+    label = paste0( round( frac_more_annuals, 2)*100, '%', '(',`more annuals`,')')
+  ) %>%
+  ggplot( aes( x = decade, y = perc_more_annuals )) + 
   facet_wrap( ~ ecogroup ) + 
   geom_bar(stat = 'identity') + 
-  geom_text( aes( label = paste0( `more annuals`,'(', round( frac_more_annuals, 2)*100, '%)')), nudge_y = 0.08, size = 3) + 
-  ylab( 'Fraction of Allotments') + 
+  geom_text( aes( label = label), nudge_y = 10, size = 3) + 
+  ylab( 'Percent of Allotments') + 
   xlab( 'Decade') + 
   theme_bw() + 
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
   ggtitle('Annual Production > Perennial Production') + 
-  ggsave( 'output/figures/Fig_Supp_annual_gt_perennial_by_decade.png', 
+  ggsave( 'output/figures/Fig_Supp_annual_production_gt_perennial_by_decade.png', 
           height = 6, width = 8, units = 'in', dpi = 600)
 
 # Annual Cover ---------------------------------------- 
@@ -76,21 +81,26 @@ annual_cover_dominance <- annual_data %>%
   arrange( ecogroup, decade ) %>%
   mutate( n_total = `more perennials` + `more annuals`) %>% 
   mutate( frac_more_perennials = `more perennials`/n_total ) %>% 
-  mutate( frac_more_annuals = `more annuals`/n_total )
+  mutate( frac_more_annuals = `more annuals`/n_total ) 
 
 annual_cover_dominance %>% 
   write_csv('output/tables/annual_cover_dominance.csv')
 
 annual_cover_dominance %>% 
   filter( ecogroup != 'Marine West Coast Forest') %>% 
-  ggplot( aes( x = decade, y = frac_more_annuals )) + 
+  mutate( 
+    label = paste0( round( frac_more_annuals, 2)*100, '%', '(',`more annuals`,')')
+  ) %>% 
+  mutate( perc_more_annuals = frac_more_annuals*100 ) %>% 
+  ggplot( aes( x = decade, y = perc_more_annuals )) + 
   facet_wrap( ~ ecogroup ) + 
   geom_bar(stat = 'identity') + 
-  geom_text( aes( label = paste0( `more annuals`,'(', round( frac_more_annuals, 2)*100, '%)')), nudge_y = 0.08, size = 3) + 
-  ylab( 'Fraction of Allotments') + 
+  geom_text( aes( label = label ) , nudge_y = 10 , size = 3) + 
+  ylab( 'Percent of Allotments') + 
   xlab( 'Decade') + 
   theme_bw() + 
   ggtitle('Annual Cover > Perennial Cover')  + 
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
   ggsave( 'output/figures/Fig_Supp_annual_cover_gt_perennial_by_decade.png', 
           height = 6, width = 8, units = 'in', dpi = 600)
 

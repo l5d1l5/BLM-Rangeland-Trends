@@ -8,6 +8,7 @@ names(error_scale_colors) <- c('Office', 'Allotment', 'Pixel')
 
 my_colors0 <-
   c('sienna1', 'black', '8dd3c7', '#fb8072', '#80b1d3', 'magenta')
+
 names(my_colors0) <-
   c("Annual", "Bare", "Perennial", "Shrub", "Tree", "Litter")
 

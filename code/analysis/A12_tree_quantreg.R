@@ -7,7 +7,7 @@ source('code/analysis/functions.R')
 
 tree_model <- read_rds('output/TREE_cover_trend_model.rds')
 annual_data <- read_rds('data/temp/annual_data.rds')
-allotments <- read_rds('data/temp/allotment_info.rds')
+allotments <- read_csv('data/temp/allotment_info.csv')
 
 annual_data <- annual_data %>% 
   left_join(allotments, by = 'uname')

@@ -64,7 +64,7 @@ for( i in 1:length(model_files) ) {
   num_obs <- summary(m) %>% .$residuals %>% length()
   group_n <- c(total.obs = num_obs, group_n )
   
-  model_title <- paste( paste0( LETTERS[i], ')'), model_type[i], 'Biomass Model')
+  model_title <- paste( paste0( LETTERS[i], ')'), model_type[i], 'Production Model')
   
   table_output <- list(   mtab %>%
                             filter( is.na(group )) %>%
@@ -83,7 +83,7 @@ for( i in 1:length(model_files) ) {
                             kbl(caption = 'Groups')
   )
   
-  file_name <- file.path('output/tables', paste0( model_type[i], '_biomass.html')) 
+  file_name <- file.path('output/tables', paste0( model_type[i], '_production.html')) 
   
   table_output <- lapply( table_output , function(x) x %>%kable_classic_2(html_font = 'arial', font_size = 10))  
   
